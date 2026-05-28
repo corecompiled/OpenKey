@@ -26,9 +26,13 @@ Output: `publish\OpenKey.exe`.
 
 | Command | Effect |
 |---------|--------|
-| `/model` | Show current active model |
-| `/reset` | Wipe `%APPDATA%\OpenKey\` and re-run first-run setup |
-| `/quit`  | Exit |
+| `/about`  | Show version, data dir, active model, developer |
+| `/models` | Pick a free model with arrow keys (pinned until restart) |
+| `/model`  | Show current active model |
+| `/cls`    | Clear the screen and reprint the header |
+| `/help`   | List all commands |
+| `/reset`  | Wipe `%APPDATA%\OpenKey\` and re-run first-run setup |
+| `/quit`   | Exit (alias: `/exit`) |
 
 ## Where data is stored
 
