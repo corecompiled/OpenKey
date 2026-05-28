@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>OpenKey.Core</RootNamespace>
+    <AssemblyName>OpenKey.Core</AssemblyName>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="OpenKey.Core.Tests" />
+  </ItemGroup>
+</Project>

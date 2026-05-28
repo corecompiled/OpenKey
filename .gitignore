@@ -1,0 +1,35 @@
+# Build output
+bin/
+obj/
+publish/
+out/
+*.user
+*.suo
+
+# IDE
+.vs/
+.vscode/
+.idea/
+*.swp
+
+# Logs
+*.log
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Test results
+TestResults/
+*.trx
+*.coverage
+coverage.*.xml
+
+# NuGet
+*.nupkg
+*.snupkg
+.nuget/
+
+# Local config (never commit secrets)
+*.local.json
+.env

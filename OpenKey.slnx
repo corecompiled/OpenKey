@@ -1,0 +1,28 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/OpenKey/OpenKey.csproj" />
+    <Project Path="src/OpenKey.Core/OpenKey.Core.csproj" />
+    <Project Path="src/OpenKey.Providers.OpenRouter/OpenKey.Providers.OpenRouter.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/OpenKey.Core.Tests/OpenKey.Core.Tests.csproj" />
+    <Project Path="tests/OpenKey.Tests/OpenKey.Tests.csproj" />
+  </Folder>
+  <Folder Name="/docs/">
+    <File Path="docs/00-overview.md" />
+    <File Path="docs/01-architecture.md" />
+    <File Path="docs/02-phase1-build.md" />
+    <File Path="docs/03-openrouter-integration.md" />
+    <File Path="docs/04-model-rotation.md" />
+    <File Path="docs/05-persistence-and-reset.md" />
+    <File Path="docs/06-build-and-distribute.md" />
+    <File Path="docs/07-roadmap.md" />
+  </Folder>
+  <Folder Name="/_root/">
+    <File Path="README.md" />
+    <File Path="CLAUDE.md" />
+    <File Path=".editorconfig" />
+    <File Path=".gitignore" />
+    <File Path="Directory.Build.props" />
+  </Folder>
+</Solution>
