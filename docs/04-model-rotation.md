@@ -1,0 +1,202 @@
+# 04 — Model Rotation
+
+How OpenKey picks a free model, when it gives up, and how it recovers.
+
+## Policy summary
+
+> Try the preferred model. On a transient failure, mark it on cooldown and try the next preferred model. Never retry an auth failure. Persist cooldown state across runs.
+
+## State per model
+
+```csharp
+public sealed class ModelState
+{
+    public string ModelId { get; init; } = "";
+    public int FailureCount { get; set; }
+    public DateTimeOffset? CooldownUntil { get; set; }
+    public ChatErrorKind? LastErrorKind { get; set; }
+    public DateTimeOffset LastUsedAt { get; set; }
+}
+```
+
+Persisted to `%APPDATA%\OpenKey\rotation.state.json` after every update.
+
+## Preferred order
+
+Default ordering algorithm (run once per session, after catalog refresh):
+
+1. Take all `IsFree == true` models from catalog.
+2. Sort by `ContextLength` descending.
+3. Cap to top 8.
+4. Result = preferred order list.
+
+Optionally overridable via `%APPDATA%\OpenKey\config.json`:
+
+```json
+{
+  "preferredModels": [
+    "meta-llama/llama-3.3-70b-instruct:free",
+    "google/gemini-2.0-flash-exp:free",
+    "qwen/qwen-2.5-72b-instruct:free"
+  ]
+}
+```
+
+If `preferredModels` set, use it verbatim (intersected with currently-available free list).
+
+## `PickAsync` algorithm
+
+```
+1. let now = DateTimeOffset.UtcNow
+2. for each modelId in preferredOrder:
+     state = states.GetOrAdd(modelId)
+     if state.CooldownUntil == null || state.CooldownUntil <= now:
+         return the corresponding ModelInfo
+3. // all on cooldown — return the one with the soonest CooldownUntil
+4. if soonest still in the future:
+     sleep until that time (cap 30s; if more, surface error to user)
+5. return that model
+```
+
+## Cooldown durations
+
+Base cooldowns by `ChatErrorKind`:
+
+| Kind                  | Base cooldown | Notes |
+|-----------------------|---------------|-------|
+| `TransientRateLimit`  | 60 s          | If `Retry-After` header present, use `max(header, 60s)`. |
+| `TransientServer`     | 30 s          | |
+| `NetworkDown`         | 15 s          | Not really model-specific, but cheap to apply. |
+| `QuotaExhausted`      | 1 h           | OpenRouter daily-quota signals. |
+| `MalformedResponse`   | 10 s          | Usually transient; aggressive retry. |
+| `AuthFailure`         | never retry   | Mark `CooldownUntil = DateTimeOffset.MaxValue`, surface to user. |
+
+### Exponential backoff
+
+For repeated failures (`FailureCount` increments), multiply base by `2^(FailureCount-1)`, capped at **5 minutes**:
+
+```csharp
+var multiplier = Math.Min(1 << Math.Min(state.FailureCount, 8), 64);
+var cooldown = TimeSpan.FromSeconds(baseSeconds * multiplier);
+if (cooldown > TimeSpan.FromMinutes(5)) cooldown = TimeSpan.FromMinutes(5);
+state.CooldownUntil = DateTimeOffset.UtcNow + cooldown;
+```
+
+### Recovery
+
+On `MarkSuccess`, reset `FailureCount = 0`, clear `CooldownUntil`, set `LastErrorKind = null`.
+
+## Retry loop in `ChatEngine.SendAsync`
+
+```csharp
+const int MaxAttempts = 5;
+for (int attempt = 1; attempt <= MaxAttempts; attempt++)
+{
+    var candidates = await _catalog.GetFreeModelsAsync(ct);
+    var model = await _rotation.PickAsync(candidates, ct);
+    ActiveModel = model;
+
+    AnsiConsole.MarkupLine($"[grey](trying {model.Id})[/]");
+
+    try
+    {
+        await foreach (var chunk in _provider.StreamChatAsync(
+            new ChatRequest(model.Id, BuildMessages()), ct))
+        {
+            yield return chunk;
+            if (chunk.IsFinal) { _rotation.MarkSuccess(model.Id); yield break; }
+        }
+    }
+    catch (ChatException ex) when (IsTransient(ex.Kind))
+    {
+        _rotation.MarkFailure(model.Id, ex.Kind, ex.RetryAfterHint);
+        AnsiConsole.MarkupLine($"[yellow]rotating: {model.Id} → {ex.Kind}[/]");
+        continue;
+    }
+    catch (ChatException ex)
+    {
+        _rotation.MarkFailure(model.Id, ex.Kind, ex.RetryAfterHint);
+        throw;   // fatal — surface to user
+    }
+}
+throw new ChatException(ChatErrorKind.TransientServer, "All models failed after retries.");
+```
+
+Where:
+```csharp
+static bool IsTransient(ChatErrorKind k) =>
+    k is ChatErrorKind.TransientRateLimit
+       or ChatErrorKind.TransientServer
+       or ChatErrorKind.NetworkDown
+       or ChatErrorKind.MalformedResponse;
+```
+
+## Mid-stream failure handling
+
+If `StreamChatAsync` yields some chunks then throws:
+
+1. Do **not** yield the partial assistant content as a final turn.
+2. Clear any rendered partial output from the console (Spectre `AnsiConsole.MarkupLine` a newline + status).
+3. Re-enter the retry loop with the *same* user-turn history (assistant turn not yet appended).
+4. The next model gets a fresh start with the same prompt.
+
+This means assistant turns are only appended to `_turns` after `IsFinal == true`.
+
+## Rolling-window trim
+
+Before each attempt, trim `_turns` so that the **estimated** token count fits within `model.ContextLength - reservedForResponse`.
+
+Phase 1 estimation (no tokenizer dep): `tokens ≈ totalChars / 4`. Reserve 1024 tokens for response.
+
+```csharp
+List<ChatMessage> BuildMessages()
+{
+    var max = model.ContextLength - 1024;
+    var trimmed = new List<ChatMessage>(_turns);
+
+    // Always keep system message (turns[0] if role == "system") and last user turn.
+    while (EstimateTokens(trimmed) > max && trimmed.Count > 2)
+    {
+        // Remove second message (first non-system) iteratively.
+        int dropIdx = trimmed[0].Role == "system" ? 1 : 0;
+        trimmed.RemoveAt(dropIdx);
+    }
+    return trimmed;
+}
+
+static int EstimateTokens(IEnumerable<ChatMessage> msgs) =>
+    msgs.Sum(m => (m.Role.Length + m.Content.Length) / 4 + 4);   // +4 framing overhead
+```
+
+Phase 1.2 can swap in a real tokenizer (`Tiktoken`-equivalent) without changing this interface.
+
+## User feedback
+
+Spectre messages emitted by the rotation flow:
+
+- `[grey](trying meta-llama/llama-3.3-70b-instruct:free)[/]` — on each attempt
+- `[yellow]rotating: <model> → TransientRateLimit[/]` — on retryable failure
+- `[red]all free models exhausted — try again in a few minutes[/]` — after `MaxAttempts`
+- `[red]auth failure — run /reset to re-enter your API key[/]` — on `AuthFailure`
+
+## Persistence of rotation state
+
+`rotation.state.json`:
+
+```json
+{
+  "states": {
+    "meta-llama/llama-3.3-70b-instruct:free": {
+      "modelId": "meta-llama/llama-3.3-70b-instruct:free",
+      "failureCount": 2,
+      "cooldownUntil": "2026-05-27T14:32:18Z",
+      "lastErrorKind": "TransientRateLimit",
+      "lastUsedAt": "2026-05-27T14:30:00Z"
+    }
+  }
+}
+```
+
+Loaded on startup, saved after every `MarkFailure`/`MarkSuccess`. Cooldowns persist across exits — if you hit a rate limit and close the app, the cooldown still applies next launch.
+
+`/reset` clears this file along with everything else.

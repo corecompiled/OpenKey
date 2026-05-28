@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>OpenKey.Providers.OpenRouter</RootNamespace>
+    <AssemblyName>OpenKey.Providers.OpenRouter</AssemblyName>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\OpenKey.Core\OpenKey.Core.csproj" />
+  </ItemGroup>
+</Project>
