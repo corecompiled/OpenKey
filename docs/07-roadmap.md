@@ -33,10 +33,14 @@ Small additive features that don't change the architecture.
   Hello! ...
   ```
 - **`/new`** — clear in-memory turns (keep config and key). Effectively `_engine.NewSessionAsync()`.
-- **`/about`** — Spectre panel with version, data dir, active model, pinned model, developer. *(shipped)*
-- **`/models`** — Spectre `SelectionPrompt` arrow-key picker over the free-model catalog. Selection pins via `ChatEngine.PreferredModelId` until restart; rotation policy still owns cooldown / fallback. *(shipped)*
-- **Banner** — `OpenKey vX.Y.Z` inline on the Spectre `Rule`, subline `Developed by Paolo Patron`. Data dir moved to `/about`. *(shipped)*
-- **Active-model indicator** — show `(model-id)` prefix on every `ai ❯` line (already in `02-phase1-build.md`, lock it in here).
+- **`/stop`** — cancel a running reply without Ctrl+C. Ctrl+C already works; nothing on screen says so.
+- **`/retry`** — resend the last message, typically after a rotation or an error card.
+
+`/about`, `/models`, the version banner and the active-model indicator shipped in Phase 1 and are
+documented in [`02-phase1-build.md`](02-phase1-build.md#acceptance-checklist-phase-1-done). They
+were listed here by mistake: the tier ladder puts them at Tier 1, and the lowest applicable tier
+wins. The active-model indicator landed as the `OpenKey AI · <model> · <elapsed>` reply header
+rather than a per-line prefix.
 
 ## Phase 1.2 — QoL deeper
 
@@ -44,7 +48,7 @@ Features that touch storage or DI but stay backward-compatible.
 
 - **Token counter** — estimate tokens per turn and show running total in status line. Use a real tokenizer NuGet (e.g., `Tiktoken` for OpenAI-family models, `MicrosoftDeepDev.Tokenizer` for cross-model).
 - **`/config`** — interactive Spectre menu to edit `config.json` (preferred model order, max_tokens, theme).
-- **Update checker** — on launch, query `https://api.github.com/repos/<user>/openkey/releases/latest`. If newer, Spectre yellow notice with download URL. **Do not auto-download.**
+- **Update checker** — on launch, query `https://api.github.com/repos/corecompiled/OpenKey/releases/latest`. If newer, Spectre yellow notice with download URL. **Do not auto-download.**
 - **Theme toggle** — `/theme dark|light|mono`. Stored in `config.json`. Spectre styles parameterized.
 - **Multi-key support**:
   - `/key add <name>` — add another OpenRouter key under a label
@@ -179,8 +183,13 @@ public sealed class ClaudeCodeProvider : IChatProvider
     public Task<IReadOnlyList<ModelInfo>> ListModelsAsync(CancellationToken ct) =>
         Task.FromResult<IReadOnlyList<ModelInfo>>(new[]
         {
-            new ModelInfo("claude-opus-4-7",   "Claude Opus 4.7",   200_000, IsFree: true),
-            new ModelInfo("claude-sonnet-4-6", "Claude Sonnet 4.6", 200_000, IsFree: true),
+            // NOTE: IsFree here would mean "no incremental cost to this user", which is NOT what
+            // the flag means elsewhere — IModelCatalog filters on it to build the free-model list,
+            // so setting it true would surface paid models in the /models picker and violate the
+            // no-paid-models rule. Phase 5 needs a separate notion of "already paid for", not a
+            // reuse of IsFree. Resolve before implementing.
+            new ModelInfo("claude-opus-4-7",   "Claude Opus 4.7",   200_000, IsFree: false),
+            new ModelInfo("claude-sonnet-4-6", "Claude Sonnet 4.6", 200_000, IsFree: false),
         });
 
     public async IAsyncEnumerable<ChatChunk> StreamChatAsync(ChatRequest req,
@@ -305,8 +314,15 @@ src/OpenKey.Pwa/
 
 Flat list of small, non-blocking improvements. Pick off opportunistically. Items here are explicitly **not** on the tier ladder — they're standalone polish that doesn't sequence-block anything else.
 
-- (seed) Richer banner ASCII art with version + active model
-- (seed) Color-blind-friendly default Spectre theme
+- Colour-blind-friendly palette check. The current palette is already restricted to the 16 base
+  ANSI colours and never uses colour as the *only* signal (severity always carries a glyph too),
+  so this is a verification pass rather than a redesign. See
+  [`architecture/06-console-host.md`](architecture/06-console-host.md).
+- Richer banner artwork. Deliberately low priority: the banner is the first thing a non-technical
+  user sees, and calm beats decorative.
+
+**Execution order and current state live in [`../BACKLOG.md`](../BACKLOG.md).** This file says what
+and why; the backlog says what state each item is in and what happens next.
 
 Add new entries here only when they truly don't belong in a phase. If an idea even *might* fit a tier, put it in the tier.
 

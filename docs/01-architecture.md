@@ -74,7 +74,7 @@ public sealed record ModelInfo(
 ```
 C:\Users\Patron\OpenKey\
 ├── docs\                              ← this guide set
-├── OpenKey.sln
+├── OpenKey.slnx
 └── src\
     ├── OpenKey\                       ← Console app, entry point, hosts UI
     │   └── OpenKey.csproj             (outputs OpenKey.exe)
@@ -176,7 +176,7 @@ public sealed class ChatException : Exception
 
 ## Cross-UI contract
 
-OpenKey will eventually ship on three surfaces: desktop console exe (Phase 1), desktop GUI (Phase 2), PWA (Phase 6), Android APK (Phase 7). The C# implementation here is the **reference impl**. Other impls are ports.
+OpenKey will eventually ship on four surfaces: desktop console exe (Phase 1), desktop GUI (Phase 2), PWA (Phase 6), Android APK (Phase 7). The C# implementation here is the **reference impl**. Other impls are ports.
 
 To keep all surfaces aligned, the `docs/` directory is the **language-agnostic contract**. The following sections are **normative** — any UI / language implementation must match them exactly:
 

@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    # OpenKey targets net10.0-windows and uses DPAPI, so it cannot build or test on Linux.
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # No version here: global.json pins the SDK, so CI and a developer machine agree.
+      - uses: actions/setup-dotnet@v4
+
+      - name: Restore
+        run: dotnet restore
+
+      # Directory.Build.props sets TreatWarningsAsErrors, and IsAotCompatible turns the
+      # trim/AOT analyzers on, so this is a strict gate rather than a formality.
+      - name: Build
+        run: dotnet build --no-restore -c Release
+
+      - name: Test
+        run: dotnet test --no-build -c Release --verbosity normal
+
+      # Proves the publish profile in OpenKey.csproj still produces the shipping artifact
+      # without anyone pasting flags from a README.
+      - name: Verify single-file publish
+        run: dotnet publish src/OpenKey/OpenKey.csproj -c Release -r win-x64 -o publish-check
+
+      - name: Confirm the exe exists
+        shell: pwsh
+        run: |
+          $exe = "publish-check/OpenKey.exe"
+          if (-not (Test-Path $exe)) { throw "Expected $exe to exist" }
+          $mb = [math]::Round((Get-Item $exe).Length / 1MB, 1)
+          Write-Host "OpenKey.exe is $mb MB"

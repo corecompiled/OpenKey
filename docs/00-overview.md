@@ -18,8 +18,8 @@ OpenKey is a click-and-play Windows console chat client for free LLMs available 
 
 | Phase | Goal |
 |-------|------|
-| **1** | Console chat, OpenRouter free models, rotation, persist + resume last session, `/reset`, guided first-run (OAuth/PKCE + paste) |
-| **1.1** | QoL: `/history`, `/export`, `/help`, version banner, active-model indicator |
+| **1** | Console chat, OpenRouter free models, rotation, persist + resume last session, `/reset`, guided first-run (OAuth/PKCE + paste), `/help`, `/about`, `/models`, version banner, streaming reply render |
+| **1.1** | QoL: `/new`, `/stop`, `/retry`, `/history`, `/export` |
 | **1.2** | QoL: token counter, `/config` editor, update checker, theme toggle, multi-key support |
 | **2** | GUI (Avalonia), same Core/providers |
 | **3** | Tool use / function calling (file ops, web fetch, sandboxed) |
@@ -44,12 +44,16 @@ OpenKey is a click-and-play Windows console chat client for free LLMs available 
 - Both acquisition paths validate against OpenRouter `/models` before persisting.
 - After the key is saved, the screen clears and the banner reprints before the chat REPL opens.
 - REPL labels read `<your Windows username>:` and `OpenKey AI:` (uses `Environment.UserName`).
-- When a message is sent, a `OpenKey AI is thinking…` spinner shows until the reply completes, then the reply prints as rendered markdown (bold, italic, code, headings, lists). The engine still streams chunks internally; only the display is buffered so markdown renders cleanly with no per-token re-parse.
+- When a message is sent, a `Thinking` spinner shows until the **first token**, then a
+  `OpenKey AI · <model> · <elapsed>` header appears and the reply streams in. Each markdown block is
+  repainted styled as it completes (bold, italic, code, headings, lists), while the still-arriving
+  tail stays plain — styled means settled, raw means still coming. Superseded the earlier
+  buffer-until-complete design, which showed nothing at all until the reply finished.
 - Banner shows `OpenKey vX.Y.Z` inline on the Spectre `Rule`, with subline `Developed by Paolo Patron`. Data dir is surfaced via `/about`, not the banner.
 - `/help` prints a Spectre table of all supported commands (`/about`, `/models`, `/model`, `/cls`, `/help`, `/reset`, `/quit`).
 - `/about` prints a Spectre panel with version, data dir, active model, pinned model, developer.
 - `/models` opens a Spectre `SelectionPrompt` over the free-model catalog (arrow keys, enter to select). Selection pins the model for subsequent requests until app restart; rotation still kicks in if the pinned model is rate-limited.
-- On a forced rate-limit, the app silently rotates to the next free model and continues.
+- On a forced rate-limit, the app rotates to the next free model and continues, noting it with a single quiet line ("Moved past 2 busy models."). No error, no per-attempt warnings.
 - Closing and re-launching shows the previous session restored.
 - `/reset` confirms, wipes `%APPDATA%\OpenKey\`, and re-runs first-run flow.
 
