@@ -3,6 +3,7 @@
     <RootNamespace>OpenKey.Providers.OpenRouter</RootNamespace>
     <AssemblyName>OpenKey.Providers.OpenRouter</AssemblyName>
     <IsPackable>false</IsPackable>
+    <IsAotCompatible>true</IsAotCompatible>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\OpenKey.Core\OpenKey.Core.csproj" />

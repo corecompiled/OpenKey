@@ -6,12 +6,6 @@ namespace OpenKey.Core.Storage;
 
 public sealed class JsonModelCatalog : IModelCatalog
 {
-    private static readonly JsonSerializerOptions JsonOpts = new()
-    {
-        WriteIndented = true,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-    };
-
     private static readonly TimeSpan CacheTtl = TimeSpan.FromHours(24);
 
     private readonly IAppPaths _paths;
@@ -61,7 +55,7 @@ public sealed class JsonModelCatalog : IModelCatalog
         try
         {
             using var stream = File.OpenRead(path);
-            return JsonSerializer.Deserialize<CacheEnvelope>(stream, JsonOpts);
+            return JsonSerializer.Deserialize(stream, OpenKeyJsonContext.Default.CacheEnvelope);
         }
         catch (Exception ex) when (ex is JsonException or IOException)
         {
@@ -76,10 +70,11 @@ public sealed class JsonModelCatalog : IModelCatalog
         var tmp = path + ".tmp";
         using (var stream = File.Create(tmp))
         {
-            JsonSerializer.Serialize(stream, env, JsonOpts);
+            JsonSerializer.Serialize(stream, env, OpenKeyJsonContext.Default.CacheEnvelope);
         }
         File.Move(tmp, path, overwrite: true);
     }
 
-    private sealed record CacheEnvelope(DateTimeOffset FetchedAt, IReadOnlyList<ModelInfo> Models);
+    // internal, not private: OpenKeyJsonContext must be able to name it.
+    internal sealed record CacheEnvelope(DateTimeOffset FetchedAt, IReadOnlyList<ModelInfo> Models);
 }

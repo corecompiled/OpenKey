@@ -2,17 +2,12 @@ using System.Globalization;
 using System.Text.Json;
 using OpenKey.Core.AppPaths;
 using OpenKey.Core.Providers;
+using OpenKey.Core.Storage;
 
 namespace OpenKey.Core.Engine;
 
 public sealed class RotationPolicy : IRotationPolicy
 {
-    private static readonly JsonSerializerOptions JsonOpts = new()
-    {
-        WriteIndented = true,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-    };
-
     private static readonly TimeSpan MaxCooldown = TimeSpan.FromMinutes(5);
 
     private readonly IAppPaths _paths;
@@ -144,7 +139,7 @@ public sealed class RotationPolicy : IRotationPolicy
         try
         {
             using var stream = File.OpenRead(path);
-            var env = JsonSerializer.Deserialize<StateEnvelope>(stream, JsonOpts);
+            var env = JsonSerializer.Deserialize(stream, OpenKeyJsonContext.Default.StateEnvelope);
             return env?.States is null
                 ? null
                 : new Dictionary<string, ModelState>(env.States, StringComparer.Ordinal);
@@ -163,7 +158,7 @@ public sealed class RotationPolicy : IRotationPolicy
         var env = new StateEnvelope(_states);
         using (var stream = File.Create(tmp))
         {
-            JsonSerializer.Serialize(stream, env, JsonOpts);
+            JsonSerializer.Serialize(stream, env, OpenKeyJsonContext.Default.StateEnvelope);
         }
         File.Move(tmp, path, overwrite: true);
     }
@@ -177,5 +172,6 @@ public sealed class RotationPolicy : IRotationPolicy
         public DateTimeOffset LastUsedAt { get; set; }
     }
 
-    private sealed record StateEnvelope(IReadOnlyDictionary<string, ModelState> States);
+    // internal, not private: OpenKeyJsonContext must be able to name it.
+    internal sealed record StateEnvelope(IReadOnlyDictionary<string, ModelState> States);
 }

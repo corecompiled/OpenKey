@@ -80,18 +80,16 @@ public sealed class OpenRouterProvider : IChatProvider
         ChatRequest request,
         [EnumeratorCancellation] CancellationToken ct)
     {
-        var body = new
-        {
-            model = request.Model,
-            messages = request.Messages.Select(m => new { role = m.Role, content = m.Content }).ToArray(),
-            stream = true,
-            max_tokens = request.MaxTokens ?? 2048,
-            temperature = request.Temperature,
-        };
+        var body = new ChatCompletionRequest(
+            Model: request.Model,
+            Messages: request.Messages.Select(m => new WireMessage(m.Role, m.Content)).ToArray(),
+            Stream: true,
+            MaxTokens: request.MaxTokens ?? 2048,
+            Temperature: request.Temperature);
 
         using var req = new HttpRequestMessage(HttpMethod.Post, $"{BaseUrl}/chat/completions")
         {
-            Content = JsonContent.Create(body, options: JsonOpts),
+            Content = JsonContent.Create(body, OpenRouterJsonContext.Default.ChatCompletionRequest),
         };
         ApplyHeaders(req);
 

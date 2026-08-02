@@ -151,13 +151,8 @@ public sealed class OpenRouterOAuth
 
     private Task<HttpResponseMessage> PostExchangeAsync(string code, string verifier, CancellationToken ct)
     {
-        var body = new
-        {
-            code,
-            code_verifier = verifier,
-            code_challenge_method = PkceCodes.ChallengeMethod,
-        };
-        return _http.PostAsJsonAsync(ExchangeUrl, body, ct);
+        var body = new KeyExchangeRequest(code, verifier, PkceCodes.ChallengeMethod);
+        return _http.PostAsJsonAsync(ExchangeUrl, body, OAuthJsonContext.Default.KeyExchangeRequest, ct);
     }
 
     private static string ParseKey(string text)

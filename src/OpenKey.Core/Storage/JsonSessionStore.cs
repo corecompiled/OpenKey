@@ -5,12 +5,6 @@ namespace OpenKey.Core.Storage;
 
 public sealed class JsonSessionStore : ISessionStore
 {
-    private static readonly JsonSerializerOptions JsonOpts = new()
-    {
-        WriteIndented = true,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-    };
-
     private readonly IAppPaths _paths;
 
     public JsonSessionStore(IAppPaths paths) => _paths = paths;
@@ -23,7 +17,7 @@ public sealed class JsonSessionStore : ISessionStore
         try
         {
             await using var stream = File.OpenRead(path);
-            return await JsonSerializer.DeserializeAsync<SessionSnapshot>(stream, JsonOpts, ct);
+            return await JsonSerializer.DeserializeAsync(stream, OpenKeyJsonContext.Default.SessionSnapshot, ct);
         }
         catch (Exception ex) when (ex is JsonException or IOException)
         {
@@ -41,7 +35,7 @@ public sealed class JsonSessionStore : ISessionStore
 
         await using (var stream = File.Create(tmp))
         {
-            await JsonSerializer.SerializeAsync(stream, snap, JsonOpts, ct);
+            await JsonSerializer.SerializeAsync(stream, snap, OpenKeyJsonContext.Default.SessionSnapshot, ct);
         }
         File.Move(tmp, path, overwrite: true);
     }
