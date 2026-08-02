@@ -73,7 +73,7 @@ Base cooldowns by `ChatErrorKind`:
 
 ### Exponential backoff
 
-For repeated failures (`FailureCount` increments), multiply base by `2^(FailureCount-1)`, capped at **5 minutes**:
+For repeated failures (`FailureCount` increments), multiply base by `2^FailureCount`, capped at **5 minutes**. The cap dominates quickly: a nominal 1 hour cooldown is clamped to 5 minutes like everything else.
 
 ```csharp
 var multiplier = Math.Min(1 << Math.Min(state.FailureCount, 8), 64);
@@ -96,7 +96,8 @@ for (int attempt = 1; attempt <= MaxAttempts; attempt++)
     var model = await _rotation.PickAsync(candidates, ct);
     ActiveModel = model;
 
-    AnsiConsole.MarkupLine($"[grey](trying {model.Id})[/]");
+    // NOTE: Core never writes to the console. Rotation is reported by the host, once, after the
+    // fact — see "User feedback" below.
 
     try
     {
@@ -110,7 +111,7 @@ for (int attempt = 1; attempt <= MaxAttempts; attempt++)
     catch (ChatException ex) when (IsTransient(ex.Kind))
     {
         _rotation.MarkFailure(model.Id, ex.Kind, ex.RetryAfterHint);
-        AnsiConsole.MarkupLine($"[yellow]rotating: {model.Id} → {ex.Kind}[/]");
+        OnRotation?.Invoke($"{model.Id} → {ex.Kind}");   // host counts these; it does not print them
         continue;
     }
     catch (ChatException ex)
@@ -136,7 +137,9 @@ static bool IsTransient(ChatErrorKind k) =>
 If `StreamChatAsync` yields some chunks then throws:
 
 1. Do **not** yield the partial assistant content as a final turn.
-2. Clear any rendered partial output from the console (Spectre `AnsiConsole.MarkupLine` a newline + status).
+2. Emit a `ChatChunk` with `IsAttemptRestart` set **before** any text from the next attempt. Core
+   does not touch the console; the consumer clears what it has drawn. Without this signal a
+   mid-reply rotation renders the answer twice concatenated while the saved session stores it once.
 3. Re-enter the retry loop with the *same* user-turn history (assistant turn not yet appended).
 4. The next model gets a fresh start with the same prompt.
 
@@ -172,12 +175,26 @@ Phase 1.2 can swap in a real tokenizer (`Tiktoken`-equivalent) without changing 
 
 ## User feedback
 
-Spectre messages emitted by the rotation flow:
+Rotation emits **no output of its own**. `ChatEngine` raises `OnRotation` and the host decides what,
+if anything, to show.
 
-- `[grey](trying meta-llama/llama-3.3-70b-instruct:free)[/]` — on each attempt
-- `[yellow]rotating: <model> → TransientRateLimit[/]` — on retryable failure
-- `[red]all free models exhausted — try again in a few minutes[/]` — after `MaxAttempts`
-- `[red]auth failure — run /reset to re-enter your API key[/]` — on `AuthFailure`
+The console shows a single grey line above the reply, and only when rotation actually occurred:
+
+```
+Moved past 2 busy models.
+```
+
+Three rules, all learned the hard way:
+
+- **Not a warning.** Rotation working correctly is the feature doing its job. Yellow per-attempt
+  lines made a healthy app look broken.
+- **Not during the reply.** Writing mid-stream corrupts the spinner and the streamed text, because
+  both own the cursor.
+- **No model ids and no `ChatErrorKind` names.** The model that answered is already in the reply
+  header; the ones that didn't are not the user's problem.
+
+Failures that stop the turn are rendered as error cards by the host — see
+[`architecture/07-error-taxonomy.md`](architecture/07-error-taxonomy.md) for the copy per kind.
 
 ## Persistence of rotation state
 

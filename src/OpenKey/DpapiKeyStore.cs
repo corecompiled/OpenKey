@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using OpenKey.Core.AppPaths;
+using OpenKey.Core.Providers;
 using OpenKey.Core.Storage;
 
 namespace OpenKey;
@@ -32,17 +33,47 @@ public sealed class DpapiKeyStore : IKeyStore
         }
     }
 
+    /// <summary>
+    /// Unlike the other stores, a failure here is NOT swallowed. Session history and rotation state
+    /// are conveniences, but a key that silently fails to persist means signing in again on every
+    /// launch with no explanation — the user has to be told.
+    /// </summary>
     public void Save(string apiKey)
     {
-        _paths.EnsureRoot();
-        var plain = Encoding.UTF8.GetBytes(apiKey);
-        var cipher = ProtectedData.Protect(plain, Entropy, DataProtectionScope.CurrentUser);
-        File.WriteAllBytes(_paths.KeyFile, cipher);
+        try
+        {
+            _paths.EnsureRoot();
+            var plain = Encoding.UTF8.GetBytes(apiKey);
+            var cipher = ProtectedData.Protect(plain, Entropy, DataProtectionScope.CurrentUser);
+            File.WriteAllBytes(_paths.KeyFile, cipher);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            throw new ChatException(
+                ChatErrorKind.MalformedResponse,
+                $"Couldn't save your key to {_paths.RootDir}. Check the folder is writable and the disk isn't full.",
+                null,
+                ex);
+        }
+        catch (CryptographicException ex)
+        {
+            throw new ChatException(
+                ChatErrorKind.MalformedResponse,
+                "Windows wouldn't encrypt the key for this account.",
+                null,
+                ex);
+        }
     }
 
     public void Clear()
     {
-        var path = _paths.KeyFile;
-        if (File.Exists(path)) File.Delete(path);
+        try
+        {
+            var path = _paths.KeyFile;
+            if (File.Exists(path)) File.Delete(path);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+        }
     }
 }

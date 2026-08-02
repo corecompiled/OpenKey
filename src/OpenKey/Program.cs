@@ -18,7 +18,10 @@ services.AddSingleton<IKeyStore, DpapiKeyStore>();
 services.AddSingleton<ISessionStore, JsonSessionStore>();
 services.AddSingleton<IRotationPolicy, RotationPolicy>();
 
-services.AddSingleton(_ => new HttpClient { Timeout = TimeSpan.FromSeconds(60) });
+// Infinite on purpose. HttpClient.Timeout bounds the *entire* response including reading the body,
+// even with ResponseHeadersRead, so any finite value here silently aborts long-but-healthy streamed
+// replies and gets misread as a network fault. The provider applies per-read deadlines instead.
+services.AddSingleton(_ => new HttpClient { Timeout = Timeout.InfiniteTimeSpan });
 
 services.AddSingleton<IChatProvider>(sp =>
 {
@@ -28,8 +31,23 @@ services.AddSingleton<IChatProvider>(sp =>
 });
 
 services.AddSingleton<IModelCatalog, JsonModelCatalog>();
+services.AddSingleton<IConfigStore, JsonConfigStore>();
+services.AddSingleton<ITokenCounter, TiktokenCounter>();
 services.AddSingleton<ChatEngine>();
 services.AddSingleton<ConsoleHost>();
 
 await using var sp = services.BuildServiceProvider();
-await sp.GetRequiredService<ConsoleHost>().RunAsync();
+
+try
+{
+    await sp.GetRequiredService<ConsoleHost>().RunAsync();
+}
+catch (Exception ex)
+{
+    // Without this the window closes on the same frame as the stack trace, so a double-clicked
+    // OpenKey.exe just vanishes and the user has nothing to report.
+    ConsoleHost.ReportFatal(ex);
+    return 1;
+}
+
+return 0;

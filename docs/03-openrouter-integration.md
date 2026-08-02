@@ -12,7 +12,7 @@ Wire-level details for `OpenRouterProvider : IChatProvider`. Authoritative exter
 |--------|-------|-------|
 | `Authorization` | `Bearer <api-key>` | Loaded from `IKeyStore` |
 | `Content-Type` | `application/json` | POSTs only |
-| `HTTP-Referer` | `https://github.com/<user>/openkey` or `https://openkey.local` | OpenRouter uses this for app analytics; can be any URL we own/control. Use a fixed app constant. |
+| `HTTP-Referer` | `https://github.com/corecompiled/OpenKey` or `https://openkey.local` | OpenRouter uses this for app analytics; can be any URL we own/control. Use a fixed app constant. |
 | `X-Title` | `OpenKey` | Shown in OpenRouter dashboard |
 
 Define once in `OpenRouterProvider`:
@@ -255,7 +255,7 @@ Response body:
 
 Persist `key` exactly like a pasted key — DPAPI on desktop, platform-equivalent on PWA/Android (see `05-persistence-and-reset.md`).
 
-### Error mapping
+### OAuth error mapping
 
 | HTTP | Kind | Notes |
 |------|------|-------|

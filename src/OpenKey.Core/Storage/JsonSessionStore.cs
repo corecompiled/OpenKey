@@ -5,12 +5,6 @@ namespace OpenKey.Core.Storage;
 
 public sealed class JsonSessionStore : ISessionStore
 {
-    private static readonly JsonSerializerOptions JsonOpts = new()
-    {
-        WriteIndented = true,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-    };
-
     private readonly IAppPaths _paths;
 
     public JsonSessionStore(IAppPaths paths) => _paths = paths;
@@ -23,7 +17,7 @@ public sealed class JsonSessionStore : ISessionStore
         try
         {
             await using var stream = File.OpenRead(path);
-            return await JsonSerializer.DeserializeAsync<SessionSnapshot>(stream, JsonOpts, ct);
+            return await JsonSerializer.DeserializeAsync(stream, OpenKeyJsonContext.Default.SessionSnapshot, ct);
         }
         catch (Exception ex) when (ex is JsonException or IOException)
         {
@@ -35,20 +29,35 @@ public sealed class JsonSessionStore : ISessionStore
 
     public async Task SaveAsync(SessionSnapshot snap, CancellationToken ct)
     {
-        _paths.EnsureRoot();
-        var path = _paths.SessionFile;
-        var tmp = path + ".tmp";
-
-        await using (var stream = File.Create(tmp))
+        // Best-effort. This runs immediately after a reply has been generated but before it is
+        // shown; an unguarded throw here loses the user a reply they already paid for, over a
+        // full disk or a read-only roaming profile. Losing history is the lesser failure.
+        try
         {
-            await JsonSerializer.SerializeAsync(stream, snap, JsonOpts, ct);
+            _paths.EnsureRoot();
+            var path = _paths.SessionFile;
+            var tmp = path + ".tmp";
+
+            await using (var stream = File.Create(tmp))
+            {
+                await JsonSerializer.SerializeAsync(stream, snap, OpenKeyJsonContext.Default.SessionSnapshot, ct);
+            }
+            File.Move(tmp, path, overwrite: true);
         }
-        File.Move(tmp, path, overwrite: true);
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+        }
     }
 
     public void Clear()
     {
-        var path = _paths.SessionFile;
-        if (File.Exists(path)) File.Delete(path);
+        try
+        {
+            var path = _paths.SessionFile;
+            if (File.Exists(path)) File.Delete(path);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+        }
     }
 }

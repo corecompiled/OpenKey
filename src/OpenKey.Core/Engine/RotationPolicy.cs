@@ -2,17 +2,12 @@ using System.Globalization;
 using System.Text.Json;
 using OpenKey.Core.AppPaths;
 using OpenKey.Core.Providers;
+using OpenKey.Core.Storage;
 
 namespace OpenKey.Core.Engine;
 
 public sealed class RotationPolicy : IRotationPolicy
 {
-    private static readonly JsonSerializerOptions JsonOpts = new()
-    {
-        WriteIndented = true,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-    };
-
     private static readonly TimeSpan MaxCooldown = TimeSpan.FromMinutes(5);
 
     private readonly IAppPaths _paths;
@@ -26,8 +21,14 @@ public sealed class RotationPolicy : IRotationPolicy
 
     public async Task<ModelInfo> PickAsync(IReadOnlyList<ModelInfo> candidates, CancellationToken ct)
     {
+        // ChatException, not InvalidOperationException: callers catch the former, so the latter
+        // escaped as an unhandled crash whenever the free-model list came back empty.
         if (candidates.Count == 0)
-            throw new InvalidOperationException("No candidate models available.");
+        {
+            throw new ChatException(
+                ChatErrorKind.TransientServer,
+                "No free models are available right now.");
+        }
 
         var now = DateTimeOffset.UtcNow;
 
@@ -144,7 +145,7 @@ public sealed class RotationPolicy : IRotationPolicy
         try
         {
             using var stream = File.OpenRead(path);
-            var env = JsonSerializer.Deserialize<StateEnvelope>(stream, JsonOpts);
+            var env = JsonSerializer.Deserialize(stream, OpenKeyJsonContext.Default.StateEnvelope);
             return env?.States is null
                 ? null
                 : new Dictionary<string, ModelState>(env.States, StringComparer.Ordinal);
@@ -157,15 +158,24 @@ public sealed class RotationPolicy : IRotationPolicy
 
     private void SaveToDisk()
     {
-        _paths.EnsureRoot();
-        var path = _paths.RotationStateFile;
-        var tmp = path + ".tmp";
-        var env = new StateEnvelope(_states);
-        using (var stream = File.Create(tmp))
+        // Best-effort. This runs from MarkSuccess/MarkFailure in the middle of a turn, so an
+        // unguarded IOException here would surface as a crash on an otherwise healthy reply.
+        // Cooldown state is a convenience; losing it costs one wasted retry after a restart.
+        try
         {
-            JsonSerializer.Serialize(stream, env, JsonOpts);
+            _paths.EnsureRoot();
+            var path = _paths.RotationStateFile;
+            var tmp = path + ".tmp";
+            var env = new StateEnvelope(_states);
+            using (var stream = File.Create(tmp))
+            {
+                JsonSerializer.Serialize(stream, env, OpenKeyJsonContext.Default.StateEnvelope);
+            }
+            File.Move(tmp, path, overwrite: true);
         }
-        File.Move(tmp, path, overwrite: true);
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+        }
     }
 
     public sealed class ModelState
@@ -177,5 +187,6 @@ public sealed class RotationPolicy : IRotationPolicy
         public DateTimeOffset LastUsedAt { get; set; }
     }
 
-    private sealed record StateEnvelope(IReadOnlyDictionary<string, ModelState> States);
+    // internal, not private: OpenKeyJsonContext must be able to name it.
+    internal sealed record StateEnvelope(IReadOnlyDictionary<string, ModelState> States);
 }

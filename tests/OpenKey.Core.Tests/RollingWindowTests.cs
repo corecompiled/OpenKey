@@ -26,7 +26,6 @@ public sealed class RollingWindowTests
     {
         Assert.True(ChatEngine.IsTransient(ChatErrorKind.TransientRateLimit));
         Assert.True(ChatEngine.IsTransient(ChatErrorKind.TransientServer));
-        Assert.True(ChatEngine.IsTransient(ChatErrorKind.NetworkDown));
         Assert.True(ChatEngine.IsTransient(ChatErrorKind.MalformedResponse));
     }
 
@@ -35,5 +34,28 @@ public sealed class RollingWindowTests
     {
         Assert.False(ChatEngine.IsTransient(ChatErrorKind.AuthFailure));
         Assert.False(ChatEngine.IsTransient(ChatErrorKind.QuotaExhausted));
+    }
+
+    [Fact]
+    public void NetworkDownDoesNotRotate()
+    {
+        // With no route to the provider every model fails identically, so rotating would burn all
+        // five attempts and leave every model cooling down for an outage none of them caused.
+        Assert.False(ChatEngine.IsTransient(ChatErrorKind.NetworkDown));
+    }
+
+    [Fact]
+    public void NetworkDownIsNotBlamedOnTheModel()
+    {
+        Assert.False(ChatEngine.IsModelFault(ChatErrorKind.NetworkDown));
+        Assert.True(ChatEngine.IsModelFault(ChatErrorKind.TransientRateLimit));
+        Assert.True(ChatEngine.IsModelFault(ChatErrorKind.TransientServer));
+    }
+
+    [Fact]
+    public void InvalidRequestIsNotRetried()
+    {
+        // The request is the problem, not the model; an identical retry elsewhere cannot succeed.
+        Assert.False(ChatEngine.IsTransient(ChatErrorKind.InvalidRequest));
     }
 }

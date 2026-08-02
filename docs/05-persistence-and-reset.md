@@ -136,7 +136,16 @@ See `04-model-rotation.md` § "Persistence of rotation state".
 }
 ```
 
-If absent, defaults apply (empty list ⇒ use catalog-derived order). Phase 1 doesn't expose a UI to edit this — user edits the file manually. Phase 1.2 adds `/config`.
+If absent, defaults apply (empty list means rotation chooses freely).
+
+Owned by `IConfigStore` / `JsonConfigStore`. `preferredModels` is how a pinned model is expressed —
+a single entry — so `/models` now survives a restart. `/theme` writes `theme`.
+
+The file is meant to be hand-editable, so every field is treated as untrusted on load: blank model
+ids are dropped, `theme` is lower-cased and falls back to `default` if unknown, and `maxTokens`
+outside a sane range reverts to 2048. A corrupt file is renamed to `config.json.broken-<unix>` and
+defaults apply, exactly as with a corrupt session — preferences are never worth failing a launch
+over.
 
 ## First-run flow (detailed)
 

@@ -5,7 +5,7 @@ public sealed class OAuthPortInUseException : Exception
     public int Port { get; }
 
     public OAuthPortInUseException(int port, Exception inner)
-        : base($"Port {port} is in use by another app on this machine, so OpenKey can't receive the OAuth callback. Close the other app or use the paste flow.", inner)
+        : base("Every port OpenKey can use for browser sign-in is already taken by another app on this machine.", inner)
     {
         Port = port;
     }

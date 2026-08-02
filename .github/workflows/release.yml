@@ -1,0 +1,48 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: windows-latest
+
+    strategy:
+      matrix:
+        rid: [win-x64, win-arm64]
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+
+      - name: Test before shipping
+        run: dotnet test -c Release
+
+      # All publish flags live in OpenKey.csproj, so this line cannot drift from what was tested.
+      - name: Publish ${{ matrix.rid }}
+        run: dotnet publish src/OpenKey/OpenKey.csproj -c Release -r ${{ matrix.rid }} -o out/${{ matrix.rid }}
+
+      - name: Name the artifact by platform
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Copy-Item "out/${{ matrix.rid }}/OpenKey.exe" "dist/OpenKey-${{ matrix.rid }}.exe"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OpenKey-${{ matrix.rid }}
+          path: dist/OpenKey-${{ matrix.rid }}.exe
+
+      # Release titles carry the version only — never a phase number. See docs/06.
+      - name: Attach to the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          files: dist/OpenKey-${{ matrix.rid }}.exe
+          generate_release_notes: true

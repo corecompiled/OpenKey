@@ -14,7 +14,7 @@ End-to-end build steps. Follow top to bottom on a clean machine.
 From `C:\Users\Patron\OpenKey\`:
 
 ```cmd
-dotnet new sln -n OpenKey
+dotnet new sln -n OpenKey    # the repo now uses the newer OpenKey.slnx format
 
 dotnet new console     -n OpenKey                          -o src\OpenKey                          --framework net10.0
 dotnet new classlib    -n OpenKey.Core                     -o src\OpenKey.Core                     --framework net10.0
@@ -33,9 +33,18 @@ dotnet add src\OpenKey.Providers.OpenRouter\OpenKey.Providers.OpenRouter.csproj 
 
 ```cmd
 dotnet add src\OpenKey\OpenKey.csproj package Spectre.Console
+dotnet add src\OpenKey\OpenKey.csproj package Markdig
 dotnet add src\OpenKey\OpenKey.csproj package Microsoft.Extensions.DependencyInjection
-dotnet add src\OpenKey\OpenKey.csproj package Microsoft.Extensions.Hosting
+dotnet add src\OpenKey\OpenKey.csproj package System.Security.Cryptography.ProtectedData
 ```
+
+Two corrections to what this step originally said:
+
+- **Markdig is required.** `MarkdownConsoleRenderer` is built on it, so omitting it here produced a
+  project that does not compile.
+- **`Microsoft.Extensions.Hosting` is not used.** A REPL needs no generic host, hosted-service
+  lifetime, or configuration binding; `Program.cs` composes its dozen services explicitly. See
+  [`architecture/08-decisions.md`](architecture/08-decisions.md).
 
 `OpenKey.Core` and `OpenKey.Providers.OpenRouter` use only BCL (`System.Text.Json`, `System.Net.Http`, `System.Security.Cryptography.ProtectedData`). DPAPI lives in the `System.Security.Cryptography.ProtectedData` NuGet (it was removed from the SDK BCL on non-Windows targets):
 
@@ -45,24 +54,37 @@ dotnet add src\OpenKey.Core\OpenKey.Core.csproj package System.Security.Cryptogr
 
 ## Step 3 — Project file edits
 
-`src\OpenKey\OpenKey.csproj` — set output, version, icon (optional):
+Shared settings — `TargetFramework`, `Nullable`, `ImplicitUsings`, `Version`,
+`TreatWarningsAsErrors` — live in **`Directory.Build.props`** at the repo root, not in each project.
+Don't repeat them per project; they apply automatically.
+
+`src\OpenKey\OpenKey.csproj` carries only what is specific to the host:
 
 ```xml
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net10.0</TargetFramework>
+    <!-- -windows only on the host: DPAPI is Windows-only, and Core must stay portable
+         so a future PWA or Android port doesn't inherit a Windows target framework. -->
+    <TargetFramework>net10.0-windows</TargetFramework>
     <RootNamespace>OpenKey</RootNamespace>
     <AssemblyName>OpenKey</AssemblyName>
-    <Version>0.1.0</Version>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
+    <InvariantGlobalization>false</InvariantGlobalization>
+
+    <!-- The publish profile lives here, not in a README. See docs/06. -->
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>true</SelfContained>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <PublishReadyToRun>true</PublishReadyToRun>
+    <IsAotCompatible>true</IsAotCompatible>
   </PropertyGroup>
 </Project>
 ```
 
-`OpenKey.Core.csproj` and `OpenKey.Providers.OpenRouter.csproj` — just enable nullable + implicit usings.
+`OpenKey.Core.csproj` and `OpenKey.Providers.OpenRouter.csproj` need almost nothing beyond
+`IsAotCompatible` and their `InternalsVisibleTo` entries.
 
 ## Step 4 — File-by-file scaffold
 
@@ -234,12 +256,9 @@ public sealed class CommandRouter
 }
 ```
 
-`/reset` flow:
-1. Spectre `Confirm("Wipe all OpenKey data and re-run setup?")`
-2. `_keyStore.Clear(); _sessions.Clear(); _catalog.ClearCache(); _rotation.Clear();`
-3. Delete `%APPDATA%\OpenKey\` directory
-4. Call `EnsureFirstRunAsync()` again
-5. Continue REPL
+`/reset` semantics are normative in
+[`05-persistence-and-reset.md`](05-persistence-and-reset.md#reset-semantics) — follow that, not a
+copy here. Both files previously spelled out divergent sequences.
 
 ## First-run flow (sequence)
 
@@ -256,7 +275,7 @@ keyStore.HasKey()?  ── no ─→  Spectre SelectionPrompt:
    │                              │       │
    │                              │       OpenRouterOAuth.AcquireKeyAsync(ct):
    │                              │         1. generate PKCE pair
-   │                              │         2. start HttpListener on 127.0.0.1:<ephemeral>/callback
+   │                              │         2. start HttpListener on localhost:3000/callback (fixed)
    │                              │         3. Process.Start the openrouter.ai/auth URL
    │                              │         4. await callback ?code=... (timeout 5min)
    │                              │         5. POST /api/v1/auth/keys exchange → user_key
@@ -283,34 +302,39 @@ catalog.GetFreeModelsAsync()  (cache or refresh)
    ↓
 engine.ResumeAsync()          (loads session.json if present)
    ↓
-REPL  ("<Environment.UserName>:" prompt; "OpenKey AI is thinking…" spinner until the reply completes, then "OpenKey AI:" header + markdown-rendered reply)
+REPL  ("<Environment.UserName> ❯ " prompt; "Thinking" spinner until the FIRST token, then a
+       "OpenKey AI · <model> · <elapsed>" header and a block-by-block streamed reply)
 ```
 
 OAuth wire details live in `03-openrouter-integration.md` § "OAuth / PKCE". Storage behavior unchanged (DPAPI-encrypted `key.bin`) — OAuth is just a UX option for *obtaining* the key.
 
 ## Acceptance checklist (Phase 1 done)
 
-- [ ] `dotnet run --project src\OpenKey` launches Spectre banner
-- [ ] First-run menu offers (1) Sign in with browser (OAuth/PKCE), (2) Paste an existing key
-- [ ] During OAuth wait, hint `[p] paste, [c] cancel` is visible
-- [ ] Pressing `p` during OAuth wait drops to paste prompt within the same first-run attempt
-- [ ] Pressing `c` (or Esc) during OAuth wait returns to the menu
-- [ ] OAuth path: browser opens to `openrouter.ai/auth` with `callback_url=http://localhost:3000/callback` (fixed per docs), callback returns a key, app validates + persists DPAPI-encrypted
-- [ ] If port 3000 is in use, OpenKey reports it and offers paste fallback in the same first-run attempt
-- [ ] Paste path: secret prompt accepts a key, validates against `/models`, persists DPAPI-encrypted
-- [ ] After key validation, screen is cleared and banner reprinted before the chat REPL opens
-- [ ] REPL prompt label uses the current Windows username (`Environment.UserName`) followed by `: `
-- [ ] AI label reads `OpenKey AI:` (no `❯` glyph)
-- [ ] Banner rule reads `OpenKey vX.Y.Z` (version inline); subline reads `Developed by Paolo Patron`. No data dir on the banner.
-- [ ] `/help` prints a Spectre table listing `/about`, `/models`, `/model`, `/cls`, `/help`, `/reset`, `/quit`
-- [ ] `/about` prints a Spectre panel with version, data dir, active model, pinned model, developer
-- [ ] `/models` opens a Spectre `SelectionPrompt` over the free-model catalog with `↑/↓` navigation; selecting a model pins it (via `ChatEngine.PreferredModelId`) until restart; selecting "Auto" clears the pin
-- [ ] Reply text is never truncated — the full buffered reply (including the final chunk) is rendered and the cursor returns to the prompt without a perceived hang
-- [ ] When a message is sent, a `OpenKey AI is thinking…` spinner shows until the reply completes; then the markdown-rendered reply prints (bold, italic, inline/fenced code, headings, lists)
-- [ ] Killing model 1 (e.g., set temporary `cooldownUntil` via test hook) auto-rotates to model 2 mid-conversation
-- [ ] `/model` prints `current model: <id>`
-- [ ] `/reset` confirms, wipes, re-runs the first-run menu in same process
-- [ ] `/quit` exits cleanly
-- [ ] Close + reopen → previous session restored, last 2 turns shown
-- [ ] Ctrl+C while the reply spinner is active cancels cleanly, returns to prompt
-- [ ] Build via the `dotnet publish` command in `06-build-and-distribute.md` produces a runnable single `.exe`
+All met as of the production-readiness pass. Several items were reworded when the console was
+rebuilt — the originals described a buffered spinner and an `OpenKey AI:` label that no longer
+exist. Automated coverage is in `tests/`; see [`09-testing.md`](09-testing.md).
+
+- [x] `dotnet run --project src\OpenKey` launches the banner
+- [x] First-run menu offers (1) Sign in with browser, (2) Paste an existing key
+- [x] During OAuth wait, the hint to press `P` to paste or `Esc` to cancel is visible
+- [x] Pressing `P` during OAuth wait drops to the paste prompt within the same attempt
+- [x] Pressing `Esc` during OAuth wait returns to the menu
+- [x] OAuth path: browser opens to `openrouter.ai/auth` with `callback_url=http://localhost:3000/callback` (fixed), callback returns a key, app validates and persists it DPAPI-encrypted
+- [x] If port 3000 is in use, OpenKey says so and offers paste in the same attempt
+- [x] Paste path: secret prompt accepts a key, validates against `/models`, persists it
+- [x] After validation the screen clears and the banner reprints before the REPL opens
+- [x] REPL prompt is `<Environment.UserName> ❯ `, degrading to `>` where the glyph is unsafe
+- [x] Reply header is `OpenKey AI · <model id> · <elapsed>`, printed before the first token arrives
+- [x] Banner reads `OpenKey vX.Y.Z` with subline `Developed by Paolo Patron`; no data dir on the banner
+- [x] `/help` lists `/models`, `/model`, `/about`, `/cls`, `/help`, `/reset`, `/quit`
+- [x] `/about` shows version, active model, model choice, data dir, key handling, developer
+- [x] `/models` opens a picker showing display name and context size; selecting one pins it until restart; "Auto" clears the pin
+- [x] Reply text is never truncated; the cursor returns to the prompt without a perceived hang
+- [x] A `Thinking` spinner shows until the **first token**, then the reply streams block by block with bold, italic, inline and fenced code, headings and lists rendered
+- [x] A forced failure on model 1 rotates to model 2 mid-conversation, and the reply appears **once** (covered by `ChatEngineTests`)
+- [x] `/model` names the current model
+- [x] `/reset` states what it erases, confirms, wipes, and re-runs setup in the same process
+- [x] `/quit` exits cleanly, holding the window when double-clicked
+- [x] Close and reopen restores the previous session and shows the last 2 turns
+- [x] Ctrl+C during a reply cancels that reply only; **the next message still works**
+- [x] `dotnet publish -c Release -r win-x64` produces a runnable single `.exe` with no extra flags

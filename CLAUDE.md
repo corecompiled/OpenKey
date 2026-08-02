@@ -47,17 +47,11 @@ When the user mentions a new feature / QoL / roadmap item, slot it into existing
 2. **If it's structurally new**, add a new section in `docs/07-roadmap.md` at the correct tier position.
 3. **If it doesn't fit any tier cleanly**, add it to the **Quick Wins** flat list at the bottom of `docs/07-roadmap.md`.
 
-Sort by the **tier ladder**:
-
-| Tier | Meaning |
-|------|---------|
-| 1 | Exe-blocking (must ship for Phase 1) |
-| 2 | Exe polish (Phase 1.1 / 1.2) |
-| 3 | Current-UI features within an existing host |
-| 4 | New providers (no UI change) |
-| 5 | New UI surfaces (GUI, PWA, Android) |
+Sort by the **tier ladder**, which is defined once in [`docs/07-roadmap.md`](docs/07-roadmap.md#tier-ladder--sort-rule). Don't restate it here — a copy in this file previously drifted out of sync with the canonical one, which is exactly what rule 5 of the hygiene checklist exists to prevent.
 
 New items slot into the **lowest tier they legitimately belong to**, ordered within tier by user value. **One canonical home per item** — never silently duplicate across docs.
+
+**Roadmap vs backlog.** `docs/07-roadmap.md` says *what* and *why*, grouped by tier. [`BACKLOG.md`](BACKLOG.md) says *what state* each item is in and *in what order* it happens. Backlog entries link to the roadmap rather than restating it.
 
 ## Cross-UI guarantee
 
@@ -94,6 +88,11 @@ If any item fails, fix before reporting the task done. Surface unresolvable conf
 | File | Purpose | Contract? |
 |------|---------|-----------|
 | `CLAUDE.md` (this file) | Meta-rules for Claude sessions | no |
+| `README.md` | Front page: what it is, quick start, doc index | no |
+| `BACKLOG.md` | Execution state and order (roadmap says what/why) | no |
+| `CHANGELOG.md` | Released changes, Keep a Changelog format | no |
+| `CONTRIBUTING.md` | Build, test, house rules, contract-change process | no |
+| `SECURITY.md` | Reporting, data handling, threat model | no |
 | `docs/00-overview.md` | Pitch, principles, phase ladder, glossary | no |
 | `docs/01-architecture.md` | Layers, `IChatProvider`, error taxonomy, cross-UI contract | **yes** |
 | `docs/02-phase1-build.md` | Step-by-step Phase 1 build walkthrough | no (impl guide) |
@@ -102,6 +101,12 @@ If any item fails, fix before reporting the task done. Surface unresolvable conf
 | `docs/05-persistence-and-reset.md` | `%APPDATA%` layout, DPAPI, `/reset` | **yes** |
 | `docs/06-build-and-distribute.md` | `dotnet publish`, smoke test, USB distribution | no |
 | `docs/07-roadmap.md` | Future phases, tier ladder, Quick Wins | no |
+| `docs/08-user-guide.md` | End-user manual: commands, troubleshooting, FAQ | no |
+| `docs/09-testing.md` | Test layout, helpers, conventions | no |
+| `docs/architecture/` | Explanatory deep-dives; `01` stays normative over all of them | no |
+| `docs/architecture/08-decisions.md` | Decisions **and explicit rejections**, with evidence | no |
+
+Before proposing a library, a pattern, or an approach, check `docs/architecture/08-decisions.md` — several obvious-looking options were evaluated and rejected there for concrete, recorded reasons.
 
 ## Things never to do
 
