@@ -53,15 +53,23 @@ jobs:
       - name: Smoke test the AOT binary
         shell: pwsh
         run: |
-          # No key is configured on a runner, so first-run setup is expected. What matters is that
-          # the native binary starts, renders, and exits cleanly instead of crashing on startup —
-          # AOT failures usually surface as an immediate abort.
+          # No key exists on a runner, so first-run setup runs and then aborts on EOF — for which
+          # the app correctly returns a non-zero exit code. That is expected here, so judge the
+          # rendered output rather than the exit status.
           $out = "/quit`n" | ./out-aot/OpenKey.exe 2>&1 | Out-String
+          $global:LASTEXITCODE = 0
           Write-Host $out
-          if ($out -notmatch "OpenKey") { throw "AOT binary produced no recognisable output" }
-          Write-Host "AOT binary starts and renders."
 
-      - uses: actions/upload-artifact@v4
+          # Each assertion covers a distinct thing AOT could plausibly have broken.
+          if ($out -notmatch "OpenKey")            { throw "no recognisable output — binary likely aborted on startup" }
+          if ($out -notmatch "Welcome to OpenKey") { throw "first-run copy missing — Spectre rendering is broken" }
+          if ($out -notmatch "OpenRouter")         { throw "setup flow did not render" }
+          Write-Host "AOT binary starts, renders, and reaches first-run setup."
+
+      # always(): the artifact is the point of this workflow, and it is most wanted when a later
+      # step failed and someone needs to run the binary by hand.
+      - if: always()
+        uses: actions/upload-artifact@v4
         with:
           name: OpenKey-aot-win-x64
           path: out-aot/OpenKey.exe
