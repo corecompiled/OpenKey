@@ -1,0 +1,67 @@
+name: AOT trial
+
+# Experiment, not a gate. NativeAOT needs the MSVC linker from the Desktop C++ workload, which the
+# GitHub Windows runners have and a typical dev machine may not — so this is where the question
+# "does OpenKey build and run AOT-compiled" actually gets answered.
+#
+# Reports size and startup against the current single-file build so the trade is a measurement
+# rather than an argument. See docs/06 and docs/architecture/08-decisions.md.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [feat/aot-and-distribution]
+
+permissions:
+  contents: read
+
+jobs:
+  aot:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+
+      - name: Publish AOT
+        run: >
+          dotnet publish src/OpenKey/OpenKey.csproj -c Release -r win-x64
+          -p:PublishAot=true
+          -p:PublishSingleFile=false
+          -p:PublishReadyToRun=false
+          -p:EnableCompressionInSingleFile=false
+          -o out-aot
+
+      - name: Publish the current single-file build for comparison
+        run: dotnet publish src/OpenKey/OpenKey.csproj -c Release -r win-x64 -o out-singlefile
+
+      - name: Compare
+        shell: pwsh
+        run: |
+          $aot = Get-Item out-aot/OpenKey.exe
+          $single = Get-Item out-singlefile/OpenKey.exe
+          $aotMb = [math]::Round($aot.Length / 1MB, 1)
+          $singleMb = [math]::Round($single.Length / 1MB, 1)
+          Write-Host "single-file : $singleMb MB"
+          Write-Host "AOT         : $aotMb MB"
+          Write-Host "delta       : $([math]::Round($singleMb - $aotMb, 1)) MB smaller"
+
+          # A native build must not drag loose assemblies alongside it.
+          $dlls = (Get-ChildItem out-aot -Filter *.dll).Count
+          Write-Host "loose DLLs beside the AOT exe: $dlls"
+
+      - name: Smoke test the AOT binary
+        shell: pwsh
+        run: |
+          # No key is configured on a runner, so first-run setup is expected. What matters is that
+          # the native binary starts, renders, and exits cleanly instead of crashing on startup —
+          # AOT failures usually surface as an immediate abort.
+          $out = "/quit`n" | ./out-aot/OpenKey.exe 2>&1 | Out-String
+          Write-Host $out
+          if ($out -notmatch "OpenKey") { throw "AOT binary produced no recognisable output" }
+          Write-Host "AOT binary starts and renders."
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OpenKey-aot-win-x64
+          path: out-aot/OpenKey.exe
