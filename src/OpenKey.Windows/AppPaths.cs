@@ -1,6 +1,6 @@
 using OpenKey.Core.AppPaths;
 
-namespace OpenKey;
+namespace OpenKey.Windows;
 
 public sealed class WindowsAppPaths : IAppPaths
 {

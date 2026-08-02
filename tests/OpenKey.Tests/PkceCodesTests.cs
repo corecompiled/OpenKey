@@ -1,4 +1,4 @@
-using OpenKey.OAuth;
+using OpenKey.Windows.OAuth;
 using Xunit;
 
 namespace OpenKey.Tests;

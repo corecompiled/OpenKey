@@ -1,0 +1,25 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="OpenKey.Gui.App"
+             RequestedThemeVariant="Dark">
+
+  <Application.Styles>
+    <FluentTheme />
+  </Application.Styles>
+
+  <Application.Resources>
+    <!-- Same palette discipline as the console: one accent, one neutral, three signals.
+         Colour carries meaning, never decoration. -->
+    <Color x:Key="BrandColor">#22D3EE</Color>
+    <SolidColorBrush x:Key="Brand" Color="#22D3EE" />
+    <SolidColorBrush x:Key="Muted" Color="#94A3B8" />
+    <SolidColorBrush x:Key="Ok" Color="#4ADE80" />
+    <SolidColorBrush x:Key="Warn" Color="#FBBF24" />
+    <SolidColorBrush x:Key="Danger" Color="#F87171" />
+
+    <SolidColorBrush x:Key="Surface" Color="#0F172A" />
+    <SolidColorBrush x:Key="SurfaceRaised" Color="#1E293B" />
+    <SolidColorBrush x:Key="Line" Color="#334155" />
+    <SolidColorBrush x:Key="Body" Color="#E2E8F0" />
+  </Application.Resources>
+</Application>

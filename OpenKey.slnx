@@ -1,12 +1,15 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/OpenKey/OpenKey.csproj" />
+    <Project Path="src/OpenKey.Windows/OpenKey.Windows.csproj" />
+    <Project Path="src/OpenKey.Gui/OpenKey.Gui.csproj" />
     <Project Path="src/OpenKey.Core/OpenKey.Core.csproj" />
     <Project Path="src/OpenKey.Providers.OpenRouter/OpenKey.Providers.OpenRouter.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/OpenKey.Core.Tests/OpenKey.Core.Tests.csproj" />
     <Project Path="tests/OpenKey.Tests/OpenKey.Tests.csproj" />
+    <Project Path="tests/OpenKey.Gui.Tests/OpenKey.Gui.Tests.csproj" />
   </Folder>
   <Folder Name="/docs/">
     <File Path="docs/00-overview.md" />

@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net10.0-windows</TargetFramework>
-    <RootNamespace>OpenKey.Tests</RootNamespace>
+    <RootNamespace>OpenKey.Gui.Tests</RootNamespace>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
@@ -14,7 +14,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\OpenKey\OpenKey.csproj" />
-    <ProjectReference Include="..\..\src\OpenKey.Windows\OpenKey.Windows.csproj" />
+    <ProjectReference Include="..\..\src\OpenKey.Gui\OpenKey.Gui.csproj" />
   </ItemGroup>
 </Project>

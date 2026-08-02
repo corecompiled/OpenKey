@@ -1,7 +1,7 @@
 using Microsoft.ML.Tokenizers;
 using OpenKey.Core.Engine;
 
-namespace OpenKey;
+namespace OpenKey.Windows;
 
 /// <summary>
 /// Real token counting, backed by the cl100k_base vocabulary.
@@ -18,7 +18,7 @@ namespace OpenKey;
 /// beats being exact and slow.
 /// </para>
 /// </summary>
-internal sealed class TiktokenCounter : ITokenCounter
+public sealed class TiktokenCounter : ITokenCounter
 {
     private readonly TiktokenTokenizer? _tokenizer;
     private readonly HeuristicTokenCounter _fallback = new();

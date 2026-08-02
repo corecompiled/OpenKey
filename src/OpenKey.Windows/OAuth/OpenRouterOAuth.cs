@@ -6,7 +6,7 @@ using System.Text;
 using System.Text.Json;
 using OpenKey.Core.Providers;
 
-namespace OpenKey.OAuth;
+namespace OpenKey.Windows.OAuth;
 
 public sealed class OpenRouterOAuth
 {

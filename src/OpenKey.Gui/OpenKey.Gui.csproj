@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <RootNamespace>OpenKey.Gui</RootNamespace>
+    <AssemblyName>OpenKeyApp</AssemblyName>
+    <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+
+    <!-- Same reasoning as the console host: a native binary that starts instantly and needs
+         nothing installed. See docs/06-build-and-distribute.md. -->
+    <PublishAot>true</PublishAot>
+    <SelfContained>true</SelfContained>
+
+    <!-- Avalonia ships XAML compilation and its own analyzers; keep them strict. -->
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="12.1.1" />
+    <PackageReference Include="Avalonia.Desktop" Version="12.1.1" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.1" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="12.1.1" />
+    <PackageReference Include="Markdig" Version="1.3.2" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.10" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\OpenKey.Core\OpenKey.Core.csproj" />
+    <ProjectReference Include="..\OpenKey.Providers.OpenRouter\OpenKey.Providers.OpenRouter.csproj" />
+    <ProjectReference Include="..\OpenKey.Windows\OpenKey.Windows.csproj" />
+  </ItemGroup>
+</Project>

@@ -1,7 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 
-namespace OpenKey.OAuth;
+namespace OpenKey.Windows.OAuth;
 
 public sealed record PkceCodes(string CodeVerifier, string CodeChallenge)
 {
