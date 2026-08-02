@@ -30,7 +30,13 @@ Patron ❯
 ## Get it
 
 Download `OpenKey.exe` from [Releases](https://github.com/corecompiled/OpenKey/releases) and
-double-click it. It runs from a USB stick.
+double-click it. One 11 MB file, nothing installed, runs from a USB stick.
+
+Or via [Scoop](https://scoop.sh), which also avoids the SmartScreen prompt:
+
+```
+scoop install https://raw.githubusercontent.com/corecompiled/OpenKey/main/packaging/scoop/openkey.json
+```
 
 You'll need a free [OpenRouter](https://openrouter.ai) key. OpenKey can fetch one through your
 browser on first run, or you can paste one you already have. Either way it's encrypted for your
@@ -70,7 +76,7 @@ Requires the .NET SDK pinned in `global.json`. Windows only.
 
 ```cmd
 dotnet run --project src\OpenKey\OpenKey.csproj      # run
-dotnet test                                          # 65 tests
+dotnet test                                          # 87 tests
 dotnet publish src\OpenKey\OpenKey.csproj -c Release -r win-x64 -o publish\
 ```
 

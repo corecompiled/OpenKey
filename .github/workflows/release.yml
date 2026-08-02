@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  id-token: write        # required by Azure Trusted Signing, when enabled
 
 jobs:
   publish:
@@ -33,16 +34,60 @@ jobs:
           New-Item -ItemType Directory -Force dist | Out-Null
           Copy-Item "out/${{ matrix.rid }}/OpenKey.exe" "dist/OpenKey-${{ matrix.rid }}.exe"
 
+      # Code signing removes the SmartScreen "unrecognized app" warning, which is the biggest
+      # friction point for a product handed over on a USB stick. Disabled until the secrets exist;
+      # enable by adding the four AZURE_* secrets and setting vars.SIGNING_ENABLED to 'true'.
+      # See docs/06-build-and-distribute.md.
+      - name: Sign
+        if: vars.SIGNING_ENABLED == 'true'
+        uses: azure/trusted-signing-action@v0
+        with:
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          endpoint: ${{ secrets.AZURE_SIGNING_ENDPOINT }}
+          trusted-signing-account-name: ${{ secrets.AZURE_SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ secrets.AZURE_CERT_PROFILE }}
+          files-folder: dist
+          files-folder-filter: exe
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+
+      # Hashes are computed after signing, since signing changes the file.
+      - name: Checksum
+        shell: pwsh
+        run: |
+          $h = (Get-FileHash "dist/OpenKey-${{ matrix.rid }}.exe" -Algorithm SHA256).Hash.ToLower()
+          "$h  OpenKey-${{ matrix.rid }}.exe" | Out-File -Encoding ascii "dist/${{ matrix.rid }}.sha256"
+          Write-Host "$h  OpenKey-${{ matrix.rid }}.exe"
+
       - uses: actions/upload-artifact@v4
         with:
           name: OpenKey-${{ matrix.rid }}
-          path: dist/OpenKey-${{ matrix.rid }}.exe
+          path: dist/*
+
+  release:
+    needs: publish
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      # One checksums file per release, which is what the Scoop manifest's autoupdate reads.
+      - name: Collect checksums
+        run: |
+          mkdir -p dist
+          find artifacts -name '*.exe' -exec cp {} dist/ \;
+          cat artifacts/*/*.sha256 > "dist/OpenKey-${GITHUB_REF_NAME#v}-checksums.txt"
+          cat "dist/OpenKey-${GITHUB_REF_NAME#v}-checksums.txt"
 
       # Release titles carry the version only — never a phase number. See docs/06.
-      - name: Attach to the release
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v2
         with:
           name: ${{ github.ref_name }}
-          files: dist/OpenKey-${{ matrix.rid }}.exe
+          files: dist/*
           generate_release_notes: true

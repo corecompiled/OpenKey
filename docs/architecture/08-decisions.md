@@ -93,20 +93,35 @@ escapes corruption handling. It meant session restore had never worked.
 
 ---
 
-## NativeAOT: not now, but the old reason is dead
+## NativeAOT: adopted
 
-**Status:** watching
+**Status:** decided, measured
 
-`docs/06-build-and-distribute.md` rejected AOT because Spectre.Console used reflection. Measured
-from the shipped assemblies: `IsTrimmable` is **absent** in Spectre 0.49.1 and **present** in
-0.55.2. That reason expired.
+This document previously recorded AOT as "watching", because the stated blocker — Spectre.Console's
+internal reflection — had expired without anyone checking. Measured from the shipped assemblies,
+`IsTrimmable` is absent in Spectre 0.49.1 and present in 0.55.2.
 
-The other stated blocker, `System.Text.Json` reflection, is gone as of the source-generation work.
-`IsAotCompatible` is on across all three projects and the tree builds warning-clean, which also
-answers the open question about Markdig.
+Measured rather than argued, via `.github/workflows/aot-trial.yml`:
 
-The prize is real for a USB-distributed app: roughly 42 MB → 15–20 MB, no extract-to-temp on first
-run, faster startup. What remains is measurement, not a known obstacle.
+| | Single-file | NativeAOT |
+|---|---|---|
+| Size | 43 MB | **10.8 MB** |
+| Startup | ~1–2 s cold | **~0.16 s** |
+| Extract to temp on first run | yes | **no** |
+
+Every one of those differences matters specifically because this is software copied onto a USB
+stick and run on a machine that has nothing installed.
+
+Verified on both architectures in CI, and the x64 binary run locally against a live model:
+streaming, markdown, tokenizer, DPAPI and config persistence all work compiled. Markdig, the one
+library whose AOT behaviour was unverified, is fine.
+
+**The cost** is that `dotnet publish` now needs the MSVC linker from the Desktop C++ workload.
+`build`, `test` and `run` do not, so day-to-day work is unchanged. That was judged an acceptable
+price for a 4× smaller, instantly-starting binary — but it is a real cost, and it falls on anyone
+who wants to produce a release build.
+
+The trial workflow stays in the repo so this can be re-measured rather than re-litigated.
 
 ---
 

@@ -1,0 +1,48 @@
+{
+    "version": "0.2.0",
+    "description": "Chat with capable AI models for free, from a single Windows exe. No install, no subscription.",
+    "homepage": "https://github.com/corecompiled/OpenKey",
+    "license": "MIT",
+    "architecture": {
+        "64bit": {
+            "url": "https://github.com/corecompiled/OpenKey/releases/download/v0.2.0/OpenKey-win-x64.exe#/OpenKey.exe",
+            "hash": "1cf95b6bdcd881962172ac21d45232264c086ba2706e7f9e66bef002232f8341"
+        },
+        "arm64": {
+            "url": "https://github.com/corecompiled/OpenKey/releases/download/v0.2.0/OpenKey-win-arm64.exe#/OpenKey.exe",
+            "hash": "1be2fdba94f1d8311ae62fa3394883f7ed1ce02733c18e054326453f8134b717"
+        }
+    },
+    "bin": "OpenKey.exe",
+    "shortcuts": [
+        [
+            "OpenKey.exe",
+            "OpenKey"
+        ]
+    ],
+    "notes": [
+        "Run 'openkey' from any terminal, or use the Start menu shortcut.",
+        "",
+        "On first run OpenKey asks for a free OpenRouter key and can fetch one through your browser.",
+        "Your key is encrypted for your Windows account; settings live in %APPDATA%\\OpenKey.",
+        "",
+        "'scoop uninstall openkey' removes the app but leaves %APPDATA%\\OpenKey alone.",
+        "Run '/reset' inside OpenKey first if you want your key and conversation erased too."
+    ],
+    "checkver": {
+        "github": "https://github.com/corecompiled/OpenKey"
+    },
+    "autoupdate": {
+        "architecture": {
+            "64bit": {
+                "url": "https://github.com/corecompiled/OpenKey/releases/download/v$version/OpenKey-win-x64.exe#/OpenKey.exe"
+            },
+            "arm64": {
+                "url": "https://github.com/corecompiled/OpenKey/releases/download/v$version/OpenKey-win-arm64.exe#/OpenKey.exe"
+            }
+        },
+        "hash": {
+            "url": "$baseurl/OpenKey-$version-checksums.txt"
+        }
+    }
+}

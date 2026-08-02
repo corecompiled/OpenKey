@@ -16,6 +16,19 @@ publish that didn't paste that exact line — including CI — silently produced
 than the one that had been smoke-tested. Changing how the binary is built is a project-file edit,
 reviewed like any other.
 
+### Prerequisite: the C++ workload
+
+OpenKey publishes as a NativeAOT binary, so `dotnet publish` needs the MSVC linker. Install once:
+
+```cmd
+winget install Microsoft.VisualStudio.2022.BuildTools --override "--quiet --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
+```
+
+For `win-arm64`, also add `Microsoft.VisualStudio.Component.VC.Tools.ARM64`.
+
+Without it you get *"Platform linker not found"*. **`dotnet build`, `dotnet test` and `dotnet run`
+are unaffected** — only publishing needs this.
+
 For Windows on ARM, swap the RID:
 
 ```cmd
@@ -40,64 +53,41 @@ All set in `OpenKey.csproj`, not on the command line.
 
 | Setting | Why |
 |------|-----|
-| `SelfContained` | Bundles the .NET runtime. The user doesn't need .NET installed — this is what makes it click-and-play. |
-| `PublishSingleFile` | One file instead of a folder of DLLs. |
-| `IncludeNativeLibrariesForSelfExtract` | Native libraries bundled and extracted to a temp dir at runtime. Required for a genuine single file. |
-| `EnableCompressionInSingleFile` | Roughly 30% smaller, at the cost of a one-time decompression on first launch. |
-| `PublishReadyToRun` | Pre-jits IL so startup feels instant. Larger file. |
-| `IsAotCompatible` | Turns the trim/AOT analyzers on. Doesn't change the output; keeps the option open by failing the build on new reflection. |
+| `PublishAot` | Compiles to a native binary. No JIT, no runtime to bundle, nothing extracted at startup. |
+| `SelfContained` | Implied by AOT; stated for clarity. The user needs nothing installed. |
 | `RuntimeIdentifiers` | `win-x64;win-arm64`. |
 | `InvariantGlobalization=false` | LLM replies are full of non-ASCII text. Costs ICU in the bundle; a deliberate trade. |
 
-## Why NOT trimming
+`IsAotCompatible` is gone — it existed to surface trim/AOT warnings without committing to AOT, and
+`PublishAot` implies the same analyzers.
 
-```
-# DO NOT add:
--p:PublishTrimmed=true
-```
+## AOT, and why the old objection expired
 
-Trimming is not enabled yet. The trim analyzers *are* on (`IsAotCompatible` is set on all three
-projects) and the tree builds warning-clean, so the historical objection — that Spectre.Console's
-internal reflection would silently break the UI — no longer applies unexamined. Enabling
-`PublishTrimmed` now needs measurement rather than argument.
+This document used to say AOT was blocked by Spectre.Console's internal reflection. Measured from
+the shipped assemblies, `IsTrimmable` metadata is **absent** in Spectre.Console 0.49.1 and
+**present** in 0.55.2 — the library did the work. The other stated blocker, reflection-based
+`System.Text.Json`, went away when everything persisted moved to source-generated contexts.
 
-## Why NOT AOT (yet)
+So the question became a measurement, and `.github/workflows/aot-trial.yml` answered it:
 
-```
-# Not enabled today:
--p:PublishAot=true
-```
+| | Single-file (previous) | NativeAOT (now) |
+|---|---|---|
+| Size | 43 MB | **10.8 MB** |
+| Startup | ~1–2 s cold (decompress + extract) | **~0.16 s** |
+| Extracts to temp on first run | yes | **no** |
+| Loose DLLs beside the exe | n/a | 0 |
 
-**The reason originally given here has expired.** This section used to say Spectre.Console's
-reflection blocked AOT. Measured from the shipped assemblies: `IsTrimmable` metadata is **absent**
-in Spectre.Console 0.49.1 and **present** in 0.55.2. The library did the work.
+All three differences land on the same thing: this is software people copy onto a USB stick and
+run on someone else's machine.
 
-The other stated blocker, reflection-based `System.Text.Json`, is also gone — everything persisted
-and every request body now goes through source-generated contexts.
+Verified on both architectures in CI, and the x64 binary was run locally against a live model —
+streaming, markdown rendering, the tokenizer, DPAPI key load and config persistence all work
+compiled. The trial workflow stays in the repo so the comparison can be re-run rather than
+re-argued.
 
-Current status:
+The cost is the C++ workload prerequisite above. `build`, `test` and `run` are unaffected.
 
-| Concern | State |
-|---|---|
-| Spectre.Console | Annotated trim/AOT-compatible since 0.55 |
-| `System.Text.Json` | Source-generated contexts in place |
-| Markdig | No analyzer warnings at our call sites |
-| DPAPI via `ProtectedData` | AOT-safe |
-| `Microsoft.Extensions.DependencyInjection` | Fine — composition is explicit, no assembly scanning |
-
-So what remains is measurement, not a known obstacle. The prize is real for a USB-distributed app:
-roughly 42 MB → 15–20 MB, no extract-to-temp on first run, and faster startup. Tracked in
-[`../BACKLOG.md`](../BACKLOG.md); rationale in
-[`architecture/08-decisions.md`](architecture/08-decisions.md).
-
-## Expected output
-
-| Metric | Value |
-|--------|-------|
-| File size | ~30–50 MB (compressed) |
-| First launch cold-start | ~1–2 s (decompress + R2R) |
-| Subsequent launches | <500 ms |
-| Working set RAM | ~80–120 MB |
+Trimming is not separately enabled: AOT already implies it.
 
 ## Versioning
 
@@ -206,21 +196,9 @@ Implemented — see `.github/workflows/ci.yml` (build, test, and a publish check
 and `.github/workflows/release.yml` (both architectures attached to a `v*` tag). The sketch that
 used to live here has been replaced by the real thing.
 
-For reference, the shape is:
+No sketch is reproduced here: a workflow copied into prose is a second source of truth that drifts
+from the real one, which is the mistake the publish flags already made once. Read the files.
 
-```yaml
-name: build
-on: [push]
-jobs:
-  publish:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
-        with: { dotnet-version: '10.0.x' }
-      - run: dotnet publish src/OpenKey/OpenKey.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:PublishReadyToRun=true -o publish
-      - uses: actions/upload-artifact@v4
-        with: { name: OpenKey-exe, path: publish/OpenKey.exe }
-```
-
-Tag-driven releases come in Phase 1.2 with the update checker.
+A third workflow, `aot-trial.yml`, exists to re-measure AOT against the current single-file settings
+on demand. It is an experiment rather than a gate, and it is where the numbers in this document
+came from.
