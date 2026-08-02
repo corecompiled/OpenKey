@@ -28,6 +28,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="OpenKey.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\OpenKey.Core\OpenKey.Core.csproj" />
     <ProjectReference Include="..\OpenKey.Providers.OpenRouter\OpenKey.Providers.OpenRouter.csproj" />
   </ItemGroup>

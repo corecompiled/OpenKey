@@ -40,9 +40,17 @@ internal sealed class TranscriptWriter
     /// counts raw streamed text that gets erased again.</summary>
     private int _blocksRendered;
 
+    /// <summary>
+    /// Whether this writer may stream raw text and erase it again. Judged from the console it was
+    /// handed rather than global state, so a redirected or in-memory console behaves correctly
+    /// without any ambient setup.
+    /// </summary>
+    private readonly bool _canRewind;
+
     public TranscriptWriter(IAnsiConsole console)
     {
         _console = console;
+        _canRewind = console.Profile.Capabilities.Ansi && ConsoleLayout.Rich;
         _blockWidth = ConsoleLayout.CurrentWidth();
     }
 
@@ -160,10 +168,10 @@ internal sealed class TranscriptWriter
 
     private void WriteRaw(string delta)
     {
-        if (!ConsoleLayout.Rich)
+        if (!_canRewind)
         {
-            // Redirected or no ANSI: nothing can be erased later, so emit nothing now and let the
-            // styled render at block boundaries be the only output.
+            // Nothing could be erased later, so emit nothing now and let the styled render at each
+            // block boundary be the only output.
             return;
         }
 
@@ -217,7 +225,7 @@ internal sealed class TranscriptWriter
         _rawRows = 0;
         _col = 0;
 
-        if (!ConsoleLayout.Rich) return;
+        if (!_canRewind) return;
         if (rows == 0 && col == 0) return;
 
         // A resize mid-block invalidates the row count, and an incorrect rewind erases unrelated
@@ -237,24 +245,15 @@ internal sealed class TranscriptWriter
             return;
         }
 
+        // _canRewind already required caps.Ansi, so the escape sequence is safe here. Emitting it
+        // via ControlCode rather than a raw Console.Write keeps it inside the capability gate.
         var caps = _console.Profile.Capabilities;
-        if (caps.Ansi)
+        _console.Write(ControlCode.Create(caps, w =>
         {
-            _console.Write(ControlCode.Create(caps, w =>
-            {
-                w.Write("\r");
-                if (rows > 0) w.CursorUp(rows);
-                w.EraseInDisplay(0);   // CSI 0 J — cursor to end of screen. Never 2, never scrollback.
-            }));
-            return;
-        }
-
-        // Legacy conhost without VT: no erase sequence, so overwrite with spaces via the cursor
-        // abstraction. Writing raw escapes here would bypass the capability gate and corrupt output.
-        var width = ConsoleLayout.CurrentWidth();
-        if (rows > 0) _console.Cursor.Move(CursorDirection.Up, rows);
-        for (var i = 0; i <= rows; i++) _console.Write(new string(' ', Math.Max(0, width - 1)) + "\n");
-        _console.Cursor.Move(CursorDirection.Up, rows + 1);
+            w.Write("\r");
+            if (rows > 0) w.CursorUp(rows);
+            w.EraseInDisplay(0);   // CSI 0 J — cursor to end of screen. Never 2, never scrollback.
+        }));
     }
 
     private void RenderBlock(string block)

@@ -168,6 +168,19 @@ public sealed class ChatEngine
                             if (chunk.IsFinal)
                             {
                                 finishReason = chunk.FinishReason;
+
+                                // Commit BEFORE yielding the final chunk. A consumer that stops
+                                // enumerating as soon as it sees IsFinal — which is the natural
+                                // way to consume this, and what the console host does — disposes
+                                // the iterator at the yield, so anything after it never runs.
+                                // Persisting afterwards meant the reply was shown but never saved
+                                // and the model's success never recorded.
+                                if (thisAttemptError is null && finishReason is not null)
+                                {
+                                    await CommitTurnAsync(model, assistantBuilder.ToString(), ct);
+                                    succeeded = true;
+                                }
+
                                 yield return chunk;
                                 break;
                             }
@@ -181,17 +194,7 @@ public sealed class ChatEngine
                     }
                 }
 
-                if (thisAttemptError is null && finishReason is not null)
-                {
-                    _rotation.MarkSuccess(model.Id);
-                    var assistantText = assistantBuilder.ToString();
-                    _turns.Add(new ChatMessage(ChatMessage.AssistantRole, assistantText));
-                    await _sessions.SaveAsync(
-                        new SessionSnapshot(model.Id, DateTimeOffset.UtcNow, _turns.ToArray()),
-                        ct);
-                    succeeded = true;
-                    yield break;
-                }
+                if (succeeded) yield break;
 
                 if (thisAttemptError is not null)
                 {
@@ -232,6 +235,19 @@ public sealed class ChatEngine
                 _turns.RemoveAt(userTurnIndex);
             }
         }
+    }
+
+    /// <summary>
+    /// Records a completed turn: the model succeeded, the assistant reply joins the conversation,
+    /// and the session is written to disk.
+    /// </summary>
+    private async Task CommitTurnAsync(ModelInfo model, string assistantText, CancellationToken ct)
+    {
+        _rotation.MarkSuccess(model.Id);
+        _turns.Add(new ChatMessage(ChatMessage.AssistantRole, assistantText));
+        await _sessions.SaveAsync(
+            new SessionSnapshot(model.Id, DateTimeOffset.UtcNow, _turns.ToArray()),
+            ct);
     }
 
     private void ResetTurnsToSystemOnly()

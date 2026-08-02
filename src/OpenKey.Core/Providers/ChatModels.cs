@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace OpenKey.Core.Providers;
 
 public sealed record ChatRequest(
@@ -6,9 +8,27 @@ public sealed record ChatRequest(
     int? MaxTokens = null,
     double? Temperature = null);
 
-public sealed record ChatMessage(string Role, string Content, DateTimeOffset Timestamp)
+public sealed record ChatMessage
 {
+    /// <summary>
+    /// Marked explicitly because the convenience overload below makes two constructors visible, and
+    /// System.Text.Json refuses to guess between them. Without this, deserializing session.json
+    /// threw NotSupportedException — which the store did not catch, so restoring a saved
+    /// conversation never worked at all.
+    /// </summary>
+    [JsonConstructor]
+    public ChatMessage(string role, string content, DateTimeOffset timestamp)
+    {
+        Role = role;
+        Content = content;
+        Timestamp = timestamp;
+    }
+
     public ChatMessage(string role, string content) : this(role, content, DateTimeOffset.UtcNow) { }
+
+    public string Role { get; init; }
+    public string Content { get; init; }
+    public DateTimeOffset Timestamp { get; init; }
 
     public const string SystemRole = "system";
     public const string UserRole = "user";
