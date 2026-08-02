@@ -3,6 +3,7 @@ using OpenKey.Core.AppPaths;
 using OpenKey.Core.Engine;
 using OpenKey.Core.Providers;
 using OpenKey.Core.Storage;
+using OpenKey.Ui;
 using Spectre.Console;
 
 namespace OpenKey;
@@ -65,18 +66,28 @@ public sealed class CommandRouter
                 return CommandResult.Handled;
 
             case "/reset":
-                if (AnsiConsole.Confirm("Wipe all OpenKey data and start fresh?", defaultValue: false))
+                // Destructive confirms always state exactly what is lost first, and never default
+                // to yes.
+                Components.StatusCard(
+                    Severity.Warn,
+                    "This erases everything",
+                    "Your saved key and your entire chat history will be deleted from this PC. "
+                        + "You'll need to sign in again.",
+                    "Only continue if you meant to start completely fresh.");
+
+                if (AnsiConsole.Confirm("Erase everything and start over?", defaultValue: false))
                 {
                     await _resetAction(ct);
                 }
                 else
                 {
-                    AnsiConsole.MarkupLine("[grey]reset cancelled.[/]");
+                    Components.HintLine("Nothing was changed.");
                 }
                 return CommandResult.Handled;
 
             default:
-                AnsiConsole.MarkupLine($"[red]unknown command:[/] {Markup.Escape(cmd)}");
+                AnsiConsole.MarkupLine($"[{Theme.Muted}]There's no[/] {Markup.Escape(cmd)} [{Theme.Muted}]command.[/]");
+                Components.HintLine("Type /help to see what OpenKey can do.");
                 return CommandResult.Handled;
         }
     }
@@ -85,9 +96,9 @@ public sealed class CommandRouter
     {
         var m = _engine.ActiveModel;
         if (m is null)
-            AnsiConsole.MarkupLine("[grey]no active model yet — send a message first.[/]");
+            Components.HintLine("No model has answered yet. Send a message first.");
         else
-            AnsiConsole.MarkupLine($"current model: [bold cyan]{Markup.Escape(m.Id)}[/]");
+            AnsiConsole.MarkupLine($"Currently answering with [{Theme.Brand}]{Markup.Escape(m.Id)}[/].");
     }
 
     private async Task ShowModelPickerAsync(CancellationToken ct)
@@ -96,88 +107,105 @@ public sealed class CommandRouter
         try
         {
             await AnsiConsole.Status()
-                .Spinner(Spinner.Known.Dots)
-                .StartAsync("loading free models…", async _ =>
+                .Spinner(Glyphs.Spinner)
+                .SpinnerStyle(new Style(Color.Grey))
+                .StartAsync($"[{Theme.Muted}]Loading models[/]", async _ =>
                 {
                     models = await _catalog.GetFreeModelsAsync(ct);
                 });
         }
         catch (ChatException ex)
         {
-            AnsiConsole.MarkupLine($"[red]could not load models ({ex.Kind}):[/] {Markup.Escape(ex.Message)}");
+            Components.StatusCard(
+                Severity.Warn,
+                "Couldn't load the model list",
+                ex.Message,
+                "Check your connection and try /models again.");
             return;
         }
 
         if (models is null || models.Count == 0)
         {
-            AnsiConsole.MarkupLine("[red]no free models available.[/]");
+            Components.StatusCard(
+                Severity.Warn,
+                "No free models available",
+                "OpenRouter didn't offer any free models just now.",
+                "This is usually temporary. Try /models again shortly.");
             return;
         }
 
-        var prompt = new SelectionPrompt<string>()
-            .Title("pick a model ([grey]↑/↓ to scroll, enter to select[/])")
-            .PageSize(15)
-            .MoreChoicesText("[grey](move up and down for more)[/]")
-            .AddChoices(new[] { AutoChoiceLabel }.Concat(models.Select(m => m.Id)));
+        // Show the human-readable name and context size, not the raw id. DisplayName was fetched
+        // from the API and then never displayed anywhere.
+        var rows = models
+            .Select(m => $"{Truncate(m.DisplayName, 44).PadRight(46)}{FormatContext(m.ContextLength)}")
+            .ToList();
 
-        var choice = AnsiConsole.Prompt(prompt);
+        var prompt = new SelectionPrompt<string>
+        {
+            Title = Components.PickerTitle("Which model should answer you?"),
+            PageSize = 12,
+            MoreChoicesText = $"[{Theme.Muted}]More below[/]",
+        };
+        prompt.AddChoice(AutoChoiceLabel);
+        foreach (var row in rows) prompt.AddChoice(row);
+
+        string choice = AnsiConsole.Prompt(prompt);
 
         if (choice == AutoChoiceLabel)
         {
             _engine.PreferredModelId = null;
-            AnsiConsole.MarkupLine("[green]rotation re-enabled.[/]");
+            Components.SuccessLine("OpenKey will pick the best available model for each message.");
             return;
         }
 
-        _engine.PreferredModelId = choice;
-        var ctx = models.FirstOrDefault(m => m.Id == choice)?.ContextLength;
-        var ctxText = ctx is > 0 ? $" [grey](ctx {ctx})[/]" : string.Empty;
-        AnsiConsole.MarkupLine($"[green]pinned:[/] [bold cyan]{Markup.Escape(choice)}[/]{ctxText} [grey](until restart)[/]");
+        var picked = models[rows.IndexOf(choice)];
+        _engine.PreferredModelId = picked.Id;
+        Components.SuccessLine($"Now using {picked.DisplayName}.");
+        Components.HintLine("This lasts until you close OpenKey.");
     }
 
-    private void ShowAbout()
-    {
-        var ver = typeof(CommandRouter).Assembly
-            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
-            ?? typeof(CommandRouter).Assembly.GetName().Version?.ToString()
-            ?? "dev";
+    private static string FormatContext(int contextLength) =>
+        contextLength <= 0 ? string.Empty
+        : contextLength >= 1000 ? $"{contextLength / 1000}k context"
+        : $"{contextLength} context";
 
-        var active = _engine.ActiveModel?.Id ?? "(none yet — send a message)";
-        var pinned = _engine.PreferredModelId ?? "(auto / rotate)";
+    private static string Truncate(string value, int max) =>
+        value.Length <= max ? value : value[..(max - 1)] + Glyphs.Ellipsis;
 
-        var grid = new Grid()
-            .AddColumn(new GridColumn().NoWrap().PadRight(2))
-            .AddColumn();
-
-        grid.AddRow("[grey]Version[/]",      $"[bold]{Markup.Escape(ver)}[/]");
-        grid.AddRow("[grey]Data dir[/]",     Markup.Escape(_paths.RootDir));
-        grid.AddRow("[grey]Active model[/]", Markup.Escape(active));
-        grid.AddRow("[grey]Pinned model[/]", Markup.Escape(pinned));
-        grid.AddRow("[grey]Developer[/]",    "Paolo Patron");
-
-        AnsiConsole.Write(new Panel(grid)
-            .Header("[bold cyan] OpenKey [/]")
-            .Border(BoxBorder.Rounded)
-            .BorderColor(Color.Grey));
-    }
+    private void ShowAbout() =>
+        Components.KeyValuePanel("About OpenKey", new (string, string)[]
+        {
+            ("Version", Components.Version),
+            ("Answering with", _engine.ActiveModel?.Id ?? "Nothing yet — send a message"),
+            ("Model choice", _engine.PreferredModelId ?? "Automatic"),
+            ("Your data", _paths.RootDir),
+            ("Key security", "Encrypted for your Windows account, stored on this PC only"),
+            ("Developer", "Paolo Patron"),
+        });
 
     private static void ShowHelp()
     {
         var table = new Table()
-            .Border(TableBorder.Rounded)
+            .Border(Glyphs.Table)
             .BorderColor(Color.Grey)
-            .AddColumn(new TableColumn("[bold]Command[/]"))
-            .AddColumn(new TableColumn("[bold]What it does[/]"));
+            .Expand()
+            .AddColumn(new TableColumn($"[{Theme.Strong}]Command[/]"))
+            .AddColumn(new TableColumn($"[{Theme.Strong}]What it does[/]"));
 
-        table.AddRow("[cyan]/about[/]",  "Show version, data dir, active model, dev info");
-        table.AddRow("[cyan]/models[/]", "Pick a free model with arrow keys ([grey]pinned until restart[/])");
-        table.AddRow("[cyan]/model[/]",  "Show the current active free model");
-        table.AddRow("[cyan]/cls[/]",    "Clear the screen and reprint the header");
-        table.AddRow("[cyan]/help[/]",   "Show this list of commands");
-        table.AddRow("[cyan]/reset[/]",  "Wipe all OpenKey data and re-run first-run setup");
-        table.AddRow("[cyan]/quit[/]",   "Exit the app cleanly ([grey]alias: /exit[/])");
+        void Row(string cmd, string what) =>
+            table.AddRow($"[{Theme.Brand}]{cmd}[/]", what);
+
+        Row("/models", "Choose which AI model answers you");
+        Row("/model", "Show which model is answering right now");
+        Row("/about", "Show version, where your data lives, and who made this");
+        Row("/cls", "Clear the screen");
+        Row("/help", "Show this list");
+        Row("/reset", "Erase everything and start over, including your key and chat history");
+        Row("/quit", "Close OpenKey");
 
         AnsiConsole.Write(table);
+        AnsiConsole.WriteLine();
+        Components.HintLine("Anything that doesn't start with / is sent to the AI.");
     }
 }
 

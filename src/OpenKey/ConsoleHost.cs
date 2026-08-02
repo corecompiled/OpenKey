@@ -6,16 +6,17 @@ using OpenKey.Core.Providers;
 using OpenKey.Core.Storage;
 using OpenKey.OAuth;
 using OpenKey.Providers.OpenRouter;
+using OpenKey.Ui;
 using Spectre.Console;
 
 namespace OpenKey;
 
 public sealed class ConsoleHost
 {
-    private const string AiLabel = "[bold magenta]OpenKey AI[/]";
-
-    private readonly string _userPrompt = $"[bold cyan]{Markup.Escape(Environment.UserName)}[/]: ";
-    private readonly string _userLabel = $"[bold cyan]{Markup.Escape(Environment.UserName)}[/]";
+    // Computed, not a field initializer: those run at DI construction, before ConsoleLayout.Initialize
+    // resolves the glyph tier, so a cached value would always be the ASCII fallback.
+    private static string UserPrompt =>
+        $"[{Theme.Strong}]{Markup.Escape(Environment.UserName)}[/] [{Theme.Brand}]{Glyphs.Caret}[/] ";
 
     private readonly IAppPaths _paths;
     private readonly IKeyStore _keyStore;
@@ -67,17 +68,18 @@ public sealed class ConsoleHost
             }
         };
 
-        PrintBanner();
+        ConsoleLayout.Initialize();
 
+        // The banner is printed by first-run setup (which needs it) or by the home header (which
+        // clears first). Printing it here too showed it twice whenever the screen couldn't be cleared.
         if (!await EnsureFirstRunAsync(CancellationToken.None))
         {
-            AnsiConsole.MarkupLine("[red]setup aborted. exiting.[/]");
+            Components.HintLine("Setup didn't finish, so OpenKey will close.");
             HoldIfOwnConsole();
             return;
         }
 
         _commands = new CommandRouter(_engine, _paths, _catalog, ResetAllAsync, ClearAndShowChatHeader);
-        _engine.OnRotation += msg => AnsiConsole.MarkupLine($"[yellow]rotating: {Markup.Escape(msg)}[/]");
 
         ClearAndShowChatHeader();
 
@@ -107,7 +109,8 @@ public sealed class ConsoleHost
             await SendAndRenderAsync(line);
         }
 
-        AnsiConsole.MarkupLine("[grey]goodbye.[/]");
+        AnsiConsole.WriteLine();
+        Components.HintLine("Thanks for using OpenKey.");
         HoldIfOwnConsole();
     }
 
@@ -117,101 +120,166 @@ public sealed class ConsoleHost
         Volatile.Write(ref _turnCts, turnCts);
         var ct = turnCts.Token;
 
+        var started = System.Diagnostics.Stopwatch.StartNew();
+        var rotations = 0;
+        void CountRotation(string _) => rotations++;
+        _engine.OnRotation += CountRotation;
+
         try
         {
             await using var iter = _engine.SendAsync(userText, ct).GetAsyncEnumerator(ct);
 
-            var sb = new StringBuilder();
+            // Phase 1 — spinner owns the screen until there is something to show. The enumerator is
+            // created outside the callback so it survives the handoff; returning ends the spinner.
+            ChatChunk? firstText = null;
+            var finishedDuringSpinner = false;
+
             await AnsiConsole.Status()
-                .Spinner(Spinner.Known.Dots)
-                .StartAsync($"{AiLabel} is thinking…", async _ =>
+                .Spinner(Glyphs.Spinner)
+                .SpinnerStyle(new Style(Color.Grey))
+                .StartAsync($"[{Theme.Muted}]Thinking[/]", async _ =>
                 {
                     while (await iter.MoveNextAsync())
                     {
                         var c = iter.Current;
-                        if (!string.IsNullOrEmpty(c.DeltaText))
-                            sb.Append(c.DeltaText);
-                        if (c.IsFinal) break;
+                        if (!string.IsNullOrEmpty(c.DeltaText)) { firstText = c; return; }
+                        if (c.IsFinal) { finishedDuringSpinner = true; return; }
                     }
+                    finishedDuringSpinner = true;
                 });
 
-            if (sb.Length == 0)
+            if (firstText is null && finishedDuringSpinner)
             {
-                AnsiConsole.MarkupLine("[grey](no response)[/]");
+                Components.StatusCard(
+                    Severity.Warn,
+                    "No reply came back",
+                    "The model accepted the message but returned nothing.",
+                    "Send it again, or type /models to try a different model.");
                 return;
             }
 
-            AnsiConsole.Markup($"{AiLabel}: ");
-            MarkdownConsoleRenderer.Render(AnsiConsole.Console, sb.ToString());
-            Console.Out.Flush();
+            // Phase 2 — spinner is torn down and the cursor restored, so text can stream freely.
+            // Per-token writing under a live spinner garbles: the spinner repaints from column 0.
+            Components.ReplyHeader(_engine.ActiveModel?.Id ?? "unknown", started.Elapsed);
+            Components.RotationNote(rotations);
+
+            var writer = new TranscriptWriter(AnsiConsole.Console);
+            writer.Append(firstText!.DeltaText);
+
+            if (!firstText.IsFinal)
+            {
+                while (await iter.MoveNextAsync())
+                {
+                    var c = iter.Current;
+
+                    // The engine abandoned this attempt; everything shown so far belongs to it.
+                    if (c.IsAttemptRestart) { writer.Reset(); rotations++; continue; }
+
+                    if (!string.IsNullOrEmpty(c.DeltaText)) writer.Append(c.DeltaText);
+                    if (c.IsFinal) break;
+                }
+            }
+
+            writer.Complete();
+            AnsiConsole.WriteLine();
         }
         catch (OperationCanceledException) when (turnCts.IsCancellationRequested)
         {
             // Filtered on our own token so an upstream deadline isn't mislabelled "cancelled".
             AnsiConsole.WriteLine();
-            AnsiConsole.MarkupLine("[grey](cancelled)[/]");
-        }
-        catch (ChatException ex) when (ex.Kind == ChatErrorKind.AuthFailure)
-        {
+            Components.HintLine("Stopped.");
             AnsiConsole.WriteLine();
-            AnsiConsole.MarkupLine($"[red]auth failure:[/] {Markup.Escape(ex.Message)}");
-            AnsiConsole.MarkupLine("[red]Run[/] /reset [red]to sign in again. This also erases your chat history.[/]");
         }
         catch (ChatException ex)
         {
-            AnsiConsole.WriteLine();
-            AnsiConsole.MarkupLine($"[red]error ({ex.Kind}):[/] {Markup.Escape(ex.Message)}");
+            ShowChatError(ex);
         }
         finally
         {
+            _engine.OnRotation -= CountRotation;
             Volatile.Write(ref _turnCts, null);
             turnCts.Dispose();
-            AnsiConsole.Cursor.Show();             // Status() hides it; an aborted turn must restore it
+
+            // Status() hides the cursor, so an aborted turn must restore it — but only when there
+            // is a real console. Redirected, the legacy backend reaches for a handle that isn't
+            // there and throws "The handle is invalid", killing the app after a successful reply.
+            if (ConsoleLayout.Rich)
+            {
+                try { AnsiConsole.Cursor.Show(); } catch (IOException) { }
+            }
         }
     }
 
-    private static void PrintBanner()
+    /// <summary>
+    /// Maps an error onto copy the user can act on. Raw <see cref="ChatErrorKind"/> names and raw
+    /// exception messages never reach the screen — they were the most developer-tool-looking thing
+    /// in the app, and they told the user nothing about what to do next.
+    /// </summary>
+    private static void ShowChatError(ChatException ex)
     {
-        var ver = typeof(ConsoleHost).Assembly
-            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
-            ?? typeof(ConsoleHost).Assembly.GetName().Version?.ToString()
-            ?? "dev";
-        AnsiConsole.Write(new Rule($"[bold cyan]OpenKey[/] [grey]v{Markup.Escape(ver)}[/]").LeftJustified());
-        AnsiConsole.MarkupLine("[grey]Developed by Paolo Patron[/]");
-        AnsiConsole.WriteLine();
+        var (severity, title, detail, next) = ex.Kind switch
+        {
+            ChatErrorKind.AuthFailure => (
+                Severity.Danger,
+                "Your key was refused",
+                "OpenRouter did not accept the saved key. It may have been revoked or replaced.",
+                $"Type [{Theme.Brand}]/reset[/] to sign in again. This also erases your chat history."),
+
+            ChatErrorKind.QuotaExhausted => (
+                Severity.Danger,
+                "This key is out of credit",
+                "OpenRouter reports no remaining allowance for this key.",
+                "Add credit at https://openrouter.ai, or wait for your free allowance to renew."),
+
+            ChatErrorKind.NetworkDown => (
+                Severity.Warn,
+                "Can't reach OpenRouter",
+                ex.Message,
+                "Check your internet connection and send the message again."),
+
+            ChatErrorKind.TransientRateLimit => (
+                Severity.Warn,
+                "Every free model is busy right now",
+                ex.Message,
+                $"Wait a moment and send your message again, or type [{Theme.Brand}]/models[/] to pick a different one."),
+
+            ChatErrorKind.InvalidRequest => (
+                Severity.Danger,
+                "The model refused this message",
+                "It may be too long for the model's context, or the model may no longer exist.",
+                $"Try a shorter message, or type [{Theme.Brand}]/models[/] to pick a different model."),
+
+            _ => (
+                Severity.Warn,
+                "That didn't go through",
+                ex.Message,
+                $"Send it again, or type [{Theme.Brand}]/models[/] to try a different model."),
+        };
+
+        Components.StatusCard(severity, title, detail, next);
     }
 
-    private static void ClearAndShowChatHeader()
-    {
-        AnsiConsole.Clear();
-        PrintBanner();
+    private static void ClearAndShowChatHeader() => Components.HomeHeader();
 
-        var body = new Markup(
-            "Type a message to start chatting.\n" +
-            "\n" +
-            "[cyan]/models[/]   Choose a model\n" +
-            "[cyan]/help[/]     View all commands\n" +
-            "[cyan]/quit[/]     Exit");
-        AnsiConsole.Write(new Panel(body)
-            .Header("[bold cyan] Getting started [/]")
-            .Border(BoxBorder.Rounded)
-            .BorderColor(Color.Grey)
-            .Padding(1, 0));
-        AnsiConsole.WriteLine();
-    }
-
+    /// <summary>
+    /// Past turns are rendered entirely grey and indented, so the resumed history reads as inert
+    /// rather than as part of the live conversation.
+    /// </summary>
     private void ShowResumeRecapIfAny()
     {
-        var turns = _engine.Turns;
-        var nonSystem = turns.Where(t => t.Role != ChatMessage.SystemRole).ToList();
+        var nonSystem = _engine.Turns.Where(t => t.Role != ChatMessage.SystemRole).ToList();
         if (nonSystem.Count == 0) return;
 
-        AnsiConsole.MarkupLine("[grey]resumed previous session. last turns:[/]");
+        Components.HintLine("Picking up where you left off.");
+        AnsiConsole.WriteLine();
+
         foreach (var t in nonSystem.TakeLast(2))
         {
-            var label = t.Role == ChatMessage.UserRole ? _userLabel : AiLabel;
-            var preview = t.Content.Length > 200 ? t.Content[..200] + "…" : t.Content;
-            AnsiConsole.MarkupLine($"{label}: {Markup.Escape(preview)}");
+            var label = t.Role == ChatMessage.UserRole ? Environment.UserName : "OpenKey AI";
+            var flat = t.Content.ReplaceLineEndings(" ").Trim();
+            var preview = flat.Length > 70 ? flat[..70] + Glyphs.Ellipsis : flat;
+            AnsiConsole.MarkupLine(
+                $"  [{Theme.Muted}]{Markup.Escape(label.PadRight(12))} {Markup.Escape(preview)}[/]");
         }
         AnsiConsole.WriteLine();
     }
@@ -225,18 +293,27 @@ public sealed class ConsoleHost
             _keyStore.Clear();
         }
 
-        AnsiConsole.MarkupLine("[bold]welcome to OpenKey.[/]");
-        AnsiConsole.MarkupLine("[grey]your key will be encrypted via Windows DPAPI for your user account only.[/]");
+        Components.Banner();
+
+        // No acronyms on the first screen a new user sees. "DPAPI" was the product's second
+        // sentence; what matters to them is that the key stays on this PC.
+        AnsiConsole.MarkupLine("Welcome to OpenKey. Chat with capable AI models for free, with no subscription.");
+        AnsiConsole.WriteLine();
+        AnsiConsole.MarkupLine(
+            "You need a free OpenRouter key once. OpenKey encrypts it for your Windows account and keeps it");
+        AnsiConsole.MarkupLine("on this PC. It is never sent anywhere except OpenRouter.");
         AnsiConsole.WriteLine();
 
-        const string OAuthChoice = "Sign in with browser (OAuth/PKCE) — recommended";
-        const string PasteChoice = "I already have a key — paste it";
+        const string OAuthChoice = "Sign in with my browser";
+        const string PasteChoice = "Paste a key I already have";
 
         for (int attempt = 1; attempt <= 3; attempt++)
         {
+            // No "(attempt 1/3)" counter: showing a retry budget before anything has failed
+            // manufactures anxiety. Retries are surfaced only after a failure.
             var choice = AnsiConsole.Prompt(
                 new SelectionPrompt<string>()
-                    .Title($"how do you want to provide your OpenRouter key? (attempt {attempt}/3)")
+                    .Title(Components.PickerTitle("How would you like to connect?"))
                     .AddChoices(OAuthChoice, PasteChoice));
 
             string? key = null;
@@ -250,13 +327,16 @@ public sealed class ConsoleHost
                 }
                 catch (OperationCanceledException)
                 {
-                    AnsiConsole.MarkupLine("[grey](cancelled)[/]");
+                    Components.HintLine("Sign-in cancelled.");
                     continue;
                 }
-                catch (OAuthPortInUseException ex)
+                catch (OAuthPortInUseException)
                 {
-                    AnsiConsole.MarkupLine($"[yellow]⚠ {Markup.Escape(ex.Message)}[/]");
-                    AnsiConsole.MarkupLine("[grey]switching to paste in this attempt…[/]");
+                    Components.StatusCard(
+                        Severity.Warn,
+                        "Another app is using the sign-in port",
+                        "OpenKey needs port 3000 for a moment to receive the browser sign-in.",
+                        "Paste a key instead, or close the other app and try again.");
                     string? pasteKey;
                     try { pasteKey = AcquireKeyViaPaste(); }
                     catch (Exception) { continue; }
@@ -266,7 +346,11 @@ public sealed class ConsoleHost
                 }
                 catch (ChatException ex)
                 {
-                    AnsiConsole.MarkupLine($"[red]✗ {Markup.Escape(ex.Kind.ToString())}:[/] {Markup.Escape(ex.Message)}");
+                    Components.StatusCard(
+                        Severity.Warn,
+                        "Sign-in didn't complete",
+                        ex.Message,
+                        "Try again, or choose to paste a key instead.");
                     continue;
                 }
 
@@ -276,13 +360,12 @@ public sealed class ConsoleHost
                         key = outcome.Key;
                         break;
                     case OAuthOutcomeKind.UserChosePaste:
-                        AnsiConsole.MarkupLine("[grey]switching to paste…[/]");
                         try { key = AcquireKeyViaPaste(); }
                         catch (Exception) { continue; }
                         break;
                     case OAuthOutcomeKind.UserCanceled:
                     default:
-                        AnsiConsole.MarkupLine("[grey](cancelled)[/]");
+                        Components.HintLine("Sign-in cancelled.");
                         continue;
                 }
             }
@@ -294,7 +377,7 @@ public sealed class ConsoleHost
 
             if (string.IsNullOrEmpty(key))
             {
-                AnsiConsole.MarkupLine("[red]✗ no key acquired[/]");
+                Components.HintLine("No key was entered.");
                 continue;
             }
 
@@ -306,8 +389,10 @@ public sealed class ConsoleHost
 
     private async Task<OAuthOutcome> AcquireKeyViaOAuthAsync(CancellationToken ct)
     {
-        AnsiConsole.MarkupLine("[grey]opening browser for OpenRouter sign-in…[/]");
-        AnsiConsole.MarkupLine("[grey]press [/][bold]p[/][grey] to paste a key instead, [/][bold]c[/][grey] (or Esc) to cancel.[/]");
+        AnsiConsole.WriteLine();
+        AnsiConsole.MarkupLine("Opening your browser to sign in to OpenRouter.");
+        AnsiConsole.WriteLine();
+        Components.HintLine("Press P to paste a key instead, or Esc to cancel.");
 
         using var interruptCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         var oauth = new OpenRouterOAuth(_http);
@@ -359,12 +444,16 @@ public sealed class ConsoleHost
 
     private static string AcquireKeyViaPaste()
     {
-        AnsiConsole.MarkupLine("[grey]paste your OpenRouter API key (input is hidden). get one at [/][link]https://openrouter.ai/keys[/]");
+        AnsiConsole.WriteLine();
+        AnsiConsole.MarkupLine("Paste your OpenRouter key below. It won't appear as you type.");
+        Components.HintLine("You can create one at https://openrouter.ai/keys");
+        AnsiConsole.WriteLine();
+
         return AnsiConsole.Prompt(
-            new TextPrompt<string>("API key:")
+            new TextPrompt<string>("Key: ")
                 .Secret()
                 .Validate(k => string.IsNullOrWhiteSpace(k)
-                    ? ValidationResult.Error("[red]empty[/]")
+                    ? ValidationResult.Error($"[{Theme.Danger}]Paste a key to continue, or press Ctrl+C to go back.[/]")
                     : ValidationResult.Success()));
     }
 
@@ -375,32 +464,46 @@ public sealed class ConsoleHost
         {
             IReadOnlyList<ModelInfo>? models = null;
             await AnsiConsole.Status()
-                .Spinner(Spinner.Known.Dots)
-                .StartAsync("validating key against OpenRouter…", async _ =>
+                .Spinner(Glyphs.Spinner)
+                .SpinnerStyle(new Style(Color.Grey))
+                .StartAsync($"[{Theme.Muted}]Checking your key[/]", async _ =>
                 {
                     models = await tmp.ListModelsAsync(ct);
                 });
 
             if (models is null || models.Count == 0)
             {
-                AnsiConsole.MarkupLine("[red]✗ empty model list[/]");
+                Components.StatusCard(
+                    Severity.Warn,
+                    "No models came back",
+                    "The key worked, but OpenRouter returned an empty model list.",
+                    "This is usually temporary. Try again in a moment.");
                 return false;
             }
 
             _keyStore.Save(key);
-            AnsiConsole.MarkupLine("[green]✓ key validated and saved.[/]");
+            Components.SuccessLine("Key saved. You're ready to chat.");
             AnsiConsole.WriteLine();
             return true;
         }
         catch (ChatException ex) when (ex.Kind == ChatErrorKind.AuthFailure)
         {
-            AnsiConsole.MarkupLine($"[red]✗ invalid key:[/] {Markup.Escape(ex.Message)}");
+            Components.StatusCard(
+                Severity.Danger,
+                "That key wasn't accepted",
+                "OpenRouter rejected it. It may be mistyped, revoked, or from a different service.",
+                "Check the key at https://openrouter.ai/keys and try again.");
             return false;
         }
         catch (ChatException ex) when (ex.Kind == ChatErrorKind.NetworkDown)
         {
-            AnsiConsole.MarkupLine($"[red]✗ network unreachable:[/] {Markup.Escape(ex.Message)}");
-            if (AnsiConsole.Confirm("save key anyway and try later?", defaultValue: false))
+            Components.StatusCard(
+                Severity.Warn,
+                "Can't reach OpenRouter",
+                ex.Message,
+                "OpenKey can save the key now and check it the first time you chat.");
+
+            if (AnsiConsole.Confirm("Save the key and continue?", defaultValue: false))
             {
                 _keyStore.Save(key);
                 return true;
@@ -409,7 +512,11 @@ public sealed class ConsoleHost
         }
         catch (ChatException ex)
         {
-            AnsiConsole.MarkupLine($"[red]✗ validation failed ({ex.Kind}):[/] {Markup.Escape(ex.Message)}");
+            Components.StatusCard(
+                Severity.Warn,
+                "Couldn't check the key",
+                ex.Message,
+                "Try again, or paste a different key.");
             return false;
         }
     }
@@ -428,10 +535,14 @@ public sealed class ConsoleHost
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            AnsiConsole.MarkupLine($"[yellow]warn: could not fully remove {Markup.Escape(_paths.RootDir)}: {Markup.Escape(ex.Message)}[/]");
+            Components.StatusCard(
+                Severity.Warn,
+                "Some files couldn't be removed",
+                $"OpenKey cleared what it could from {_paths.RootDir}, but something is holding the rest.",
+                "Close any other copy of OpenKey and try again.");
         }
 
-        AnsiConsole.MarkupLine("[green]✓ reset complete.[/]");
+        Components.SuccessLine("Everything was cleared.");
         AnsiConsole.WriteLine();
 
         if (await EnsureFirstRunAsync(ct))
@@ -445,8 +556,9 @@ public sealed class ConsoleHost
         // Setup was abandoned, so there is no key. Returning to the REPL here would strand the user
         // in a loop: every message fails auth, the error says "run /reset", and /reset lands back
         // exactly here. Exiting is the only honest option.
-        AnsiConsole.MarkupLine("[red]OpenKey needs a key to work, so it will close now.[/]");
-        AnsiConsole.MarkupLine("[grey]Start it again when you're ready to sign in.[/]");
+        AnsiConsole.WriteLine();
+        AnsiConsole.MarkupLine("OpenKey needs a key to work, so it will close now.");
+        Components.HintLine("Start it again when you're ready to sign in.");
         _exiting = true;
     }
 
@@ -457,11 +569,17 @@ public sealed class ConsoleHost
     /// is redirected, which Spectre prompts now do; and a multi-line paste leaves its remaining
     /// lines in the driver buffer where they can be drained instead of being executed as commands.
     /// </summary>
-    private string? ReadUserLine()
+    private static string? ReadUserLine()
     {
-        AnsiConsole.Markup(_userPrompt);
+        AnsiConsole.WriteLine();
+        AnsiConsole.Markup(UserPrompt);
 
         var first = Console.ReadLine();
+
+        // A real console echoes the typed line and its newline; a redirected stdin does not, so
+        // without this the next output continues on the prompt row.
+        if (Console.IsInputRedirected) AnsiConsole.WriteLine();
+
         if (first is null) return null;
 
         // A human cannot type the next line within milliseconds, so input already buffered here

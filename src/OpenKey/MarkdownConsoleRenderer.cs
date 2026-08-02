@@ -2,14 +2,14 @@ using System.Text;
 using Markdig;
 using Markdig.Syntax;
 using Markdig.Syntax.Inlines;
+using OpenKey.Ui;
 using Spectre.Console;
 
 namespace OpenKey;
 
 /// <summary>
-/// Renders an LLM markdown reply to the console using Spectre. Parses once (Markdig)
-/// after the full reply is buffered — no per-token re-parse. All literal text is escaped
-/// so model output can never inject Spectre markup.
+/// Renders a markdown block to the console using Spectre. Every literal is escaped, so model
+/// output can never inject Spectre markup — the fallback path re-escapes too.
 /// </summary>
 internal static class MarkdownConsoleRenderer
 {
@@ -18,7 +18,7 @@ internal static class MarkdownConsoleRenderer
         try
         {
             var doc = Markdown.Parse(markdown);
-            RenderBlocks(console, doc, indent: 0);
+            RenderBlocks(console, doc, indent: 0, topLevel: true);
         }
         catch (Exception)
         {
@@ -28,10 +28,17 @@ internal static class MarkdownConsoleRenderer
         }
     }
 
-    private static void RenderBlocks(IAnsiConsole console, ContainerBlock container, int indent)
+    private static void RenderBlocks(IAnsiConsole console, ContainerBlock container, int indent, bool topLevel)
     {
+        var first = true;
         foreach (var block in container)
+        {
+            // One blank line between top-level blocks, never zero and never two. Previously the
+            // renderer emitted none at all, so headings, paragraphs and lists butted together.
+            if (topLevel && !first) console.WriteLine();
             RenderBlock(console, block, indent);
+            first = false;
+        }
     }
 
     private static void RenderBlock(IAnsiConsole console, Block block, int indent)
@@ -41,8 +48,10 @@ internal static class MarkdownConsoleRenderer
         {
             case HeadingBlock h:
             {
-                var color = h.Level <= 2 ? "cyan" : "white";
-                console.MarkupLine($"{pad}[bold {color}]{InlineToMarkup(h.Inline)}[/]");
+                // H1-H2 are structural, so they take the brand colour; deeper headings are just
+                // emphasis and stay uncoloured. "white" would break a light-background console.
+                var style = h.Level <= 2 ? Theme.BrandStrong : Theme.Strong;
+                console.MarkupLine($"{pad}[{style}]{InlineToMarkup(h.Inline)}[/]");
                 break;
             }
             case FencedCodeBlock fenced:
@@ -55,7 +64,7 @@ internal static class MarkdownConsoleRenderer
                 foreach (var child in quote)
                 {
                     if (child is LeafBlock lb && lb.Inline is not null)
-                        console.MarkupLine($"{pad}[grey]│ {InlineToMarkup(lb.Inline)}[/]");
+                        console.MarkupLine($"{pad}[{Theme.Muted}]{Glyphs.QuoteBar} {InlineToMarkup(lb.Inline)}[/]");
                     else
                         RenderBlock(console, child, indent);
                 }
@@ -64,13 +73,13 @@ internal static class MarkdownConsoleRenderer
                 RenderList(console, list, indent);
                 break;
             case ThematicBreakBlock:
-                console.Write(new Rule().RuleStyle("grey"));
+                console.Write(new Rule().RuleStyle(Theme.Muted));
                 break;
             case ParagraphBlock p:
                 console.MarkupLine($"{pad}{InlineToMarkup(p.Inline)}");
                 break;
             case ContainerBlock cont:
-                RenderBlocks(console, cont, indent);
+                RenderBlocks(console, cont, indent, topLevel: false);
                 break;
             case LeafBlock leaf when leaf.Inline is not null:
                 console.MarkupLine($"{pad}{InlineToMarkup(leaf.Inline)}");
@@ -84,19 +93,21 @@ internal static class MarkdownConsoleRenderer
         foreach (var item in list)
         {
             if (item is not ListItemBlock li) continue;
-            var bullet = list.IsOrdered ? $"{n}." : "•";
+            var bullet = list.IsOrdered ? $"{n}." : Glyphs.Bullet;
             n++;
 
-            var first = true;
+            var firstChild = true;
             foreach (var child in li)
             {
-                if (first && child is ParagraphBlock p)
+                if (firstChild && child is ParagraphBlock p)
                 {
-                    console.MarkupLine($"{new string(' ', indent)}[grey]{bullet}[/] {InlineToMarkup(p.Inline)}");
-                    first = false;
+                    console.MarkupLine(
+                        $"{new string(' ', indent)}[{Theme.Muted}]{bullet}[/] {InlineToMarkup(p.Inline)}");
+                    firstChild = false;
                 }
                 else
                 {
+                    // Nested content hangs under the item text: bullet + space = 2 columns.
                     RenderBlock(console, child, indent + 2);
                 }
             }
@@ -107,11 +118,11 @@ internal static class MarkdownConsoleRenderer
     {
         var body = code.TrimEnd('\n', '\r');
         var panel = new Panel(new Text(body))
-            .Border(BoxBorder.Rounded)
+            .Border(Glyphs.Box)
             .BorderColor(Color.Grey)
             .Expand();
         if (!string.IsNullOrWhiteSpace(lang))
-            panel.Header($" {Markup.Escape(lang)} ");
+            panel.Header($"[{Theme.Muted}] {Markup.Escape(lang.Trim().ToLowerInvariant())} [/]");
         console.Write(panel);
     }
 
@@ -141,7 +152,11 @@ internal static class MarkdownConsoleRenderer
                 break;
             }
             case CodeInline code:
-                sb.Append("[white on grey23]").Append(Markup.Escape(code.Content)).Append("[/]");
+                // Foreground only. The old "white on grey23" downsampled to white-on-black in
+                // 16-colour mode: invisible on light schemes, identical to body text on dark ones,
+                // so the one style meant to make code stand out did nothing.
+                sb.Append('[').Append(Theme.Code).Append(']')
+                  .Append(Markup.Escape(code.Content)).Append("[/]");
                 break;
             case LinkInline link:
             {
