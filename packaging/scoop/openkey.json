@@ -6,11 +6,11 @@
     "architecture": {
         "64bit": {
             "url": "https://github.com/corecompiled/OpenKey/releases/download/v0.2.0/OpenKey-win-x64.exe#/OpenKey.exe",
-            "hash": "REPLACE_WITH_SHA256_WIN_X64"
+            "hash": "1cf95b6bdcd881962172ac21d45232264c086ba2706e7f9e66bef002232f8341"
         },
         "arm64": {
             "url": "https://github.com/corecompiled/OpenKey/releases/download/v0.2.0/OpenKey-win-arm64.exe#/OpenKey.exe",
-            "hash": "REPLACE_WITH_SHA256_WIN_ARM64"
+            "hash": "1be2fdba94f1d8311ae62fa3394883f7ed1ce02733c18e054326453f8134b717"
         }
     },
     "bin": "OpenKey.exe",

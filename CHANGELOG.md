@@ -3,6 +3,15 @@
 Notable changes to OpenKey. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- OpenKey is now a native binary: **11 MB instead of 43 MB**, starting in about a sixth of a
+  second, with nothing unpacked to a temporary folder the first time you run it. All three matter
+  most on a USB stick or someone else's machine.
+- Installable with [Scoop](https://scoop.sh), which also avoids the "unrecognized app" prompt.
+
 ## [0.2.0] — 2026-08-03
 
 ### Added

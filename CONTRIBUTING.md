@@ -26,7 +26,17 @@ dotnet publish src\OpenKey\OpenKey.csproj -c Release -r win-x64 -o publish\
 
 Every publish flag lives in `OpenKey.csproj`. Don't pass them on the command line, and don't
 document a different command anywhere — the point is that CI and a developer machine produce the
-same artifact. See [`docs/06-build-and-distribute.md`](docs/06-build-and-distribute.md).
+same artifact.
+
+OpenKey publishes as a NativeAOT binary, so that one command needs the MSVC linker:
+
+```cmd
+winget install Microsoft.VisualStudio.2022.BuildTools --override "--quiet --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
+```
+
+Without it you get *"Platform linker not found"*. `build`, `test` and `run` are unaffected, so you
+only need this to cut a release build. See
+[`docs/06-build-and-distribute.md`](docs/06-build-and-distribute.md).
 
 ## Before you open a PR
 

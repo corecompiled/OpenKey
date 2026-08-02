@@ -9,15 +9,19 @@
     <ApplicationIcon></ApplicationIcon>
 
     <!-- Publish profile lives here, not in README prose. A bare `dotnet publish -c Release -r win-x64`
-         must produce the same artifact that gets smoke-tested and shipped. See docs/06. -->
-    <PublishSingleFile>true</PublishSingleFile>
-    <SelfContained>true</SelfContained>
-    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
-    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
-    <PublishReadyToRun>true</PublishReadyToRun>
+         must produce the same artifact that gets smoke-tested and shipped. See docs/06.
 
-    <!-- Surfaces trim/AOT warnings without committing to PublishAot. See docs/06 "Why NOT AOT". -->
-    <IsAotCompatible>true</IsAotCompatible>
+         NativeAOT: measured at 10.8 MB against 43 MB for the previous single-file build, starting
+         in ~0.16s with nothing extracted to a temp directory on first run. All three matter for
+         something handed over on a USB stick. Verified on both architectures in CI and against a
+         live model locally.
+
+         `dotnet publish` therefore needs the MSVC linker from the "Desktop development with C++"
+         workload; see docs/06 for the exact install command. build, test and run are unaffected,
+         so day-to-day work does not change. -->
+    <PublishAot>true</PublishAot>
+    <SelfContained>true</SelfContained>
+    <InvariantTimezone>false</InvariantTimezone>
   </PropertyGroup>
 
   <ItemGroup>

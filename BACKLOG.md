@@ -96,11 +96,8 @@ and a step change in scope rather than more polish.
 
 Not scheduled; revisit when the trigger fires.
 
-- **NativeAOT** — would cut the binary from ~42 MB to roughly 15–20 MB, remove the extract-to-temp
-  step on first run, and start faster. All three matter for the USB story. The old blocker
-  (Spectre reflection) is gone as of 0.55, and JSON source generation has landed, so the remaining
-  cost is measuring what the analyzers still report. `IsAotCompatible` is already on and the tree
-  is warning-clean.
+- ~~**NativeAOT**~~ — **done.** 43 MB → 10.8 MB, ~0.16 s startup, nothing extracted to temp. See
+  [`docs/architecture/08-decisions.md`](docs/architecture/08-decisions.md).
 - **`System.Net.ServerSentEvents`** — would replace the hand-rolled SSE reader. Preview-only today
   (`11.0.0-preview.6`); adopt when it ships stable.
 - **Bracketed paste** — a more robust multi-line paste than the current timing heuristic. Needs a
