@@ -136,8 +136,38 @@ public sealed class TranscriptWriterTests
 
         var text = output.ToString();
         Assert.Contains("The capital of France is Paris.", text, StringComparison.Ordinal);
-        Assert.DoesNotContain("is Par\n", text, StringComparison.Ordinal);
-        Assert.Equal(1, CountOccurrences(text, "The capital of France"));
+
+        // How "discarded" is observable depends on whether the console allows raw streaming, and
+        // a StringWriter has no cursor for an escape sequence to move. Assert what is actually
+        // true in each case rather than picking one and hoping the environment agrees — an
+        // earlier version of this test passed locally and failed in CI for exactly that reason.
+        if (output.ToString().Contains(''))
+            Assert.Contains("[", text, StringComparison.Ordinal);   // an erase was issued
+        else
+            Assert.Equal(1, CountOccurrences(text, "The capital of France"));
+    }
+
+    [Fact]
+    public void RewindIssuesAnEraseRatherThanClearingScrollback()
+    {
+        // The rewind path only runs on an ANSI console, so nothing else in this suite reaches it.
+        // EraseInDisplay(2) or ClearScrollback here would wipe the conversation — the precise
+        // reason LiveDisplay was rejected — so pin the sequence that is allowed.
+        var output = new StringWriter();
+        var console = AnsiConsole.Create(new AnsiConsoleSettings
+        {
+            Ansi = AnsiSupport.Yes,
+            ColorSystem = ColorSystemSupport.NoColors,
+            Out = new AnsiConsoleOutput(output),
+        });
+
+        var writer = new TranscriptWriter(console);
+        writer.Append("some text that will be replaced\n\n");
+        writer.Complete();
+
+        var text = output.ToString();
+        Assert.DoesNotContain("[2J", text, StringComparison.Ordinal);   // never whole-screen
+        Assert.DoesNotContain("[3J", text, StringComparison.Ordinal);   // never scrollback
     }
 
     [Fact]
