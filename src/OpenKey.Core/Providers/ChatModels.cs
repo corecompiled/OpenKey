@@ -15,7 +15,17 @@ public sealed record ChatMessage(string Role, string Content, DateTimeOffset Tim
     public const string AssistantRole = "assistant";
 }
 
-public sealed record ChatChunk(string DeltaText, bool IsFinal, string? FinishReason);
+/// <param name="IsAttemptRestart">
+/// Set when the engine has abandoned a failed attempt and is starting over on another model.
+/// Any text yielded before this point belongs to the discarded attempt: a consumer that is
+/// accumulating deltas must clear its buffer, or a mid-reply rotation renders the answer twice
+/// concatenated while the persisted session stores it once. Providers never set this.
+/// </param>
+public sealed record ChatChunk(
+    string DeltaText,
+    bool IsFinal,
+    string? FinishReason,
+    bool IsAttemptRestart = false);
 
 public sealed record ModelInfo(
     string Id,

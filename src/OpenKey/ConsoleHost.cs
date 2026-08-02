@@ -27,6 +27,9 @@ public sealed class ConsoleHost
 
     private CommandRouter _commands = default!;
 
+    private CancellationTokenSource? _turnCts;
+    private volatile bool _exiting;
+
     public ConsoleHost(
         IAppPaths paths,
         IKeyStore keyStore,
@@ -47,11 +50,21 @@ public sealed class ConsoleHost
 
     public async Task RunAsync()
     {
-        using var cts = new CancellationTokenSource();
+        // One CTS per turn, held here so the Ctrl+C handler can reach the in-flight one.
+        // The previous design used a single process-lifetime CTS: once Ctrl+C cancelled it, every
+        // later turn was born already cancelled and the session was unusable until restart.
         Console.CancelKeyPress += (_, e) =>
         {
-            e.Cancel = true;
-            cts.Cancel();
+            e.Cancel = true;                       // always swallow; never let the CLR kill us
+            var turn = Volatile.Read(ref _turnCts);
+            if (turn is not null && !turn.IsCancellationRequested)
+            {
+                turn.Cancel();                     // mid-turn: cancel just this reply
+            }
+            else
+            {
+                _exiting = true;                   // at the prompt: quit
+            }
         };
 
         PrintBanner();
@@ -59,6 +72,7 @@ public sealed class ConsoleHost
         if (!await EnsureFirstRunAsync(CancellationToken.None))
         {
             AnsiConsole.MarkupLine("[red]setup aborted. exiting.[/]");
+            HoldIfOwnConsole();
             return;
         }
 
@@ -70,33 +84,37 @@ public sealed class ConsoleHost
         await _engine.ResumeAsync(CancellationToken.None);
         ShowResumeRecapIfAny();
 
-        while (true)
+        while (!_exiting)
         {
-            string line;
+            string? line;
             try
             {
-                line = AnsiConsole.Prompt(new TextPrompt<string>(_userPrompt).AllowEmpty());
+                line = ReadUserLine();
             }
             catch (Exception)
             {
                 break;
             }
 
+            if (line is null) break;                       // EOF / Ctrl+D
+            if (_exiting) break;
             if (string.IsNullOrWhiteSpace(line)) continue;
 
             var result = await _commands.HandleAsync(line, CancellationToken.None);
             if (result == CommandResult.Exit) break;
             if (result == CommandResult.Handled) continue;
 
-            await SendAndRenderAsync(line, cts);
+            await SendAndRenderAsync(line);
         }
 
         AnsiConsole.MarkupLine("[grey]goodbye.[/]");
+        HoldIfOwnConsole();
     }
 
-    private async Task SendAndRenderAsync(string userText, CancellationTokenSource outerCts)
+    private async Task SendAndRenderAsync(string userText)
     {
-        using var turnCts = CancellationTokenSource.CreateLinkedTokenSource(outerCts.Token);
+        var turnCts = new CancellationTokenSource();
+        Volatile.Write(ref _turnCts, turnCts);
         var ct = turnCts.Token;
 
         try
@@ -127,8 +145,9 @@ public sealed class ConsoleHost
             MarkdownConsoleRenderer.Render(AnsiConsole.Console, sb.ToString());
             Console.Out.Flush();
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (turnCts.IsCancellationRequested)
         {
+            // Filtered on our own token so an upstream deadline isn't mislabelled "cancelled".
             AnsiConsole.WriteLine();
             AnsiConsole.MarkupLine("[grey](cancelled)[/]");
         }
@@ -136,12 +155,18 @@ public sealed class ConsoleHost
         {
             AnsiConsole.WriteLine();
             AnsiConsole.MarkupLine($"[red]auth failure:[/] {Markup.Escape(ex.Message)}");
-            AnsiConsole.MarkupLine("[red]run [/]/reset[red] to re-enter your API key.[/]");
+            AnsiConsole.MarkupLine("[red]Run[/] /reset [red]to sign in again. This also erases your chat history.[/]");
         }
         catch (ChatException ex)
         {
             AnsiConsole.WriteLine();
             AnsiConsole.MarkupLine($"[red]error ({ex.Kind}):[/] {Markup.Escape(ex.Message)}");
+        }
+        finally
+        {
+            Volatile.Write(ref _turnCts, null);
+            turnCts.Dispose();
+            AnsiConsole.Cursor.Show();             // Status() hides it; an aborted turn must restore it
         }
     }
 
@@ -414,8 +439,124 @@ public sealed class ConsoleHost
             try { await _catalog.RefreshAsync(ct); } catch (ChatException) { /* will retry on first turn */ }
             ClearAndShowChatHeader();
             await _engine.ResumeAsync(ct);
+            return;
+        }
+
+        // Setup was abandoned, so there is no key. Returning to the REPL here would strand the user
+        // in a loop: every message fails auth, the error says "run /reset", and /reset lands back
+        // exactly here. Exiting is the only honest option.
+        AnsiConsole.MarkupLine("[red]OpenKey needs a key to work, so it will close now.[/]");
+        AnsiConsole.MarkupLine("[grey]Start it again when you're ready to sign in.[/]");
+        _exiting = true;
+    }
+
+    /// <summary>
+    /// Reads one chat line. Uses <see cref="Console.ReadLine"/> rather than a Spectre prompt for
+    /// three reasons: it gets the Windows console's native line editor (arrows, Home/End, word
+    /// jump, F7 history) which Spectre's reader does not implement; it does not throw when output
+    /// is redirected, which Spectre prompts now do; and a multi-line paste leaves its remaining
+    /// lines in the driver buffer where they can be drained instead of being executed as commands.
+    /// </summary>
+    private string? ReadUserLine()
+    {
+        AnsiConsole.Markup(_userPrompt);
+
+        var first = Console.ReadLine();
+        if (first is null) return null;
+
+        // A human cannot type the next line within milliseconds, so input already buffered here
+        // means a paste. Drain it so the rest of the paste joins this message rather than being
+        // submitted as separate turns — one of which could start with '/' and run as a command.
+        if (!TryPeekBufferedInput()) return first;
+
+        var sb = new StringBuilder(first);
+        while (TryPeekBufferedInput())
+        {
+            var next = Console.ReadLine();
+            if (next is null) break;
+            sb.Append('\n').Append(next);
+        }
+        return sb.ToString();
+    }
+
+    private static bool TryPeekBufferedInput()
+    {
+        try
+        {
+            for (var i = 0; i < 3; i++)
+            {
+                if (Console.KeyAvailable) return true;
+                Thread.Sleep(5);
+            }
+            return false;
+        }
+        catch (InvalidOperationException)
+        {
+            return false;   // stdin redirected — no key buffer to inspect
         }
     }
+
+    /// <summary>
+    /// Renders an unhandled exception and holds the window. Called from the top-level handler.
+    /// </summary>
+    public static void ReportFatal(Exception ex)
+    {
+        try
+        {
+            AnsiConsole.WriteLine();
+            AnsiConsole.MarkupLine("[red]OpenKey hit an unexpected problem and has to close.[/]");
+            AnsiConsole.MarkupLine($"[grey]{Markup.Escape(ex.GetType().Name)}: {Markup.Escape(ex.Message)}[/]");
+            AnsiConsole.WriteLine();
+            AnsiConsole.MarkupLine("[grey]If this keeps happening, run[/] /reset [grey]on the next start.[/]");
+        }
+        catch
+        {
+            Console.WriteLine("OpenKey hit an unexpected problem and has to close.");
+            Console.WriteLine(ex);
+        }
+        HoldIfOwnConsole();
+    }
+
+    /// <summary>
+    /// When OpenKey owns its console — i.e. it was double-clicked rather than run from an existing
+    /// terminal — the window dies with the process, so any parting message is unreadable by
+    /// construction. Hold it open in that case only; never when run from a shell or a script.
+    /// </summary>
+    private static void HoldIfOwnConsole()
+    {
+        if (!OwnsConsole()) return;
+        try
+        {
+            AnsiConsole.WriteLine();
+            AnsiConsole.MarkupLine("[grey]Press any key to close.[/]");
+            Console.ReadKey(intercept: true);
+        }
+        catch (InvalidOperationException)
+        {
+            // No console to wait on.
+        }
+    }
+
+    private static bool OwnsConsole()
+    {
+        try
+        {
+            if (Console.IsOutputRedirected || Console.IsInputRedirected) return false;
+            var buffer = new uint[4];
+            var count = GetConsoleProcessList(buffer, (uint)buffer.Length);
+            return count == 1;   // only us attached => we created this window
+        }
+        catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException or InvalidOperationException)
+        {
+            return false;
+        }
+    }
+
+    // DllImport rather than LibraryImport: the latter requires AllowUnsafeBlocks project-wide,
+    // which is a lot of permission to buy for one blittable call.
+    [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+    private static extern uint GetConsoleProcessList(
+        [System.Runtime.InteropServices.Out] uint[] processList, uint processCount);
 
     private enum OAuthOutcomeKind
     {

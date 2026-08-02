@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -13,6 +14,14 @@ public sealed class OpenRouterProvider : IChatProvider
     private const string BaseUrl = "https://openrouter.ai/api/v1";
     private const string RefererHeader = "https://openkey.local";
     private const string TitleHeader = "OpenKey";
+
+    // Streaming needs per-read deadlines, not one deadline for the whole response. HttpClient.Timeout
+    // covers reading the body even under ResponseHeadersRead, so a single blanket value aborts long
+    // but perfectly healthy replies. These bound how long we wait for the *next* byte instead, which
+    // is what actually distinguishes a slow model from a dead connection.
+    private static readonly TimeSpan FirstTokenTimeout = TimeSpan.FromSeconds(45);
+    private static readonly TimeSpan StallTimeout = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan ModelListTimeout = TimeSpan.FromSeconds(30);
 
     private static readonly JsonSerializerOptions JsonOpts = new()
     {
@@ -36,25 +45,59 @@ public sealed class OpenRouterProvider : IChatProvider
         using var req = new HttpRequestMessage(HttpMethod.Get, $"{BaseUrl}/models");
         ApplyHeaders(req);
 
+        // HttpClient.Timeout is infinite so it can't abort long streams; this call is not a stream,
+        // so it carries its own deadline.
+        using var listCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        listCts.CancelAfter(ModelListTimeout);
+
         HttpResponseMessage resp;
         try
         {
-            resp = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
+            resp = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, listCts.Token);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            throw new ChatException(ChatErrorKind.NetworkDown, "OpenRouter didn't respond in time.");
         }
         catch (Exception ex) when (IsNetwork(ex))
         {
             throw new ChatException(ChatErrorKind.NetworkDown, "Network unreachable.", null, ex);
         }
 
-        await using var stream = await resp.Content.ReadAsStreamAsync(ct);
+        await using var stream = await resp.Content.ReadAsStreamAsync(listCts.Token);
         if (!resp.IsSuccessStatusCode)
         {
-            var body = await ReadBodyAsync(stream, ct);
+            var body = await ReadBodyAsync(stream, listCts.Token);
             throw MapHttpError(resp, body);
         }
 
-        using var doc = await JsonDocument.ParseAsync(stream, default, ct);
-        var data = doc.RootElement.GetProperty("data");
+        // A captive portal (hotel, airport, café) answers any request with its own login page and
+        // an HTTP 200. Unguarded, that lands here as an unhandled JsonException during first run
+        // and takes the whole window down with it.
+        JsonDocument doc;
+        try
+        {
+            doc = await JsonDocument.ParseAsync(stream, default, listCts.Token);
+        }
+        catch (JsonException ex)
+        {
+            throw new ChatException(
+                ChatErrorKind.NetworkDown,
+                "Got a reply from the network, but it wasn't from OpenRouter. "
+                    + "If you're on public Wi-Fi you may still need to sign in to it.",
+                null,
+                ex);
+        }
+
+        using (doc)
+        {
+        if (!doc.RootElement.TryGetProperty("data", out var data)
+            || data.ValueKind != JsonValueKind.Array)
+        {
+            throw new ChatException(
+                ChatErrorKind.MalformedResponse,
+                "OpenRouter's model list came back in a format OpenKey doesn't recognise.");
+        }
 
         var list = new List<ModelInfo>(capacity: data.GetArrayLength());
         foreach (var m in data.EnumerateArray())
@@ -74,6 +117,7 @@ public sealed class OpenRouterProvider : IChatProvider
         }
 
         return list;
+        }
     }
 
     public async IAsyncEnumerable<ChatChunk> StreamChatAsync(
@@ -96,7 +140,15 @@ public sealed class OpenRouterProvider : IChatProvider
         HttpResponseMessage resp;
         try
         {
-            resp = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
+            // Deadline covers only getting response headers back. Once the stream is open the
+            // per-read deadlines below take over, so a slow-but-alive model is never cut off.
+            using var connectCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            connectCts.CancelAfter(FirstTokenTimeout);
+            resp = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, connectCts.Token);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            throw new ChatException(ChatErrorKind.TransientServer, "The model didn't accept the request in time.");
         }
         catch (Exception ex) when (IsNetwork(ex))
         {
@@ -113,17 +165,40 @@ public sealed class OpenRouterProvider : IChatProvider
 
         using var reader = new StreamReader(stream);
 
+        // Some models never emit a `finish_reason` chunk and simply close with [DONE]. Remember the
+        // last one seen so a complete reply isn't reported as unfinished, discarded, and retried.
+        string? lastFinishReason = null;
+
+        var sawAnyData = false;
+
         while (true)
         {
             string? line;
+
+            // Bound the wait for the *next* line, not the whole response.
+            using var readCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            readCts.CancelAfter(sawAnyData ? StallTimeout : FirstTokenTimeout);
+
             try
             {
-                line = await reader.ReadLineAsync(ct);
+                line = await reader.ReadLineAsync(readCts.Token);
+            }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+            {
+                // Our deadline fired, not the user's cancellation. Transient, so rotation moves on
+                // to a model that is actually producing output.
+                throw new ChatException(
+                    ChatErrorKind.TransientServer,
+                    sawAnyData
+                        ? "The model stopped part-way through its reply."
+                        : "The model didn't start replying in time.");
             }
             catch (Exception ex) when (IsNetwork(ex))
             {
                 throw new ChatException(ChatErrorKind.NetworkDown, "Connection lost mid-stream.", null, ex);
             }
+
+            sawAnyData = true;
 
             if (line is null) break;
             if (line.Length == 0) continue;
@@ -133,7 +208,10 @@ public sealed class OpenRouterProvider : IChatProvider
             var payload = line.Substring("data: ".Length);
             if (payload == "[DONE]")
             {
-                yield return new ChatChunk(string.Empty, IsFinal: true, FinishReason: null);
+                // "stop" is the correct default: the server closed the stream cleanly, which is
+                // exactly what a normal completion looks like.
+                yield return new ChatChunk(
+                    string.Empty, IsFinal: true, FinishReason: lastFinishReason ?? "stop");
                 yield break;
             }
 
@@ -148,6 +226,7 @@ public sealed class OpenRouterProvider : IChatProvider
             }
 
             if (parsed is null) continue;
+            if (parsed.FinishReason is not null) lastFinishReason = parsed.FinishReason;
             yield return parsed;
             if (parsed.IsFinal) yield break;
         }
@@ -204,8 +283,14 @@ public sealed class OpenRouterProvider : IChatProvider
     private static bool IsZero(JsonElement pricing, string field)
     {
         if (!pricing.TryGetProperty(field, out var v)) return false;
+
+        // Parse rather than string-match: exact comparison against "0"/"0.0"/"0.00" silently
+        // classified a free model as paid the moment OpenRouter formatted it as "0.000000".
+        if (v.ValueKind == JsonValueKind.Number) return v.GetDouble() == 0d;
+
         var s = v.ValueKind == JsonValueKind.String ? v.GetString() : v.ToString();
-        return s == "0" || s == "0.0" || s == "0.00";
+        return double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out var d)
+            && d == 0d;
     }
 
     private static async Task<string> ReadBodyAsync(Stream stream, CancellationToken ct)
@@ -222,13 +307,18 @@ public sealed class OpenRouterProvider : IChatProvider
         var status = (int)resp.StatusCode;
         var kind = resp.StatusCode switch
         {
-            HttpStatusCode.Unauthorized                                                  => ChatErrorKind.AuthFailure,
-            HttpStatusCode.Forbidden                                                     => ChatErrorKind.AuthFailure,
-            HttpStatusCode.PaymentRequired                                               => ChatErrorKind.QuotaExhausted,
-            HttpStatusCode.RequestTimeout                                                => ChatErrorKind.TransientServer,
-            HttpStatusCode.TooManyRequests                                               => ChatErrorKind.TransientRateLimit,
-            _ when status >= 500 && status < 600                                          => ChatErrorKind.TransientServer,
-            _                                                                             => ChatErrorKind.MalformedResponse,
+            HttpStatusCode.Unauthorized         => ChatErrorKind.AuthFailure,
+            HttpStatusCode.Forbidden            => ChatErrorKind.AuthFailure,
+            HttpStatusCode.PaymentRequired      => ChatErrorKind.QuotaExhausted,
+            HttpStatusCode.RequestTimeout       => ChatErrorKind.TransientServer,
+            HttpStatusCode.TooManyRequests      => ChatErrorKind.TransientRateLimit,
+            // 400/404/422 mean the request is wrong (context overflow, unknown model). Retrying it
+            // unchanged on five other models cannot work and cools all of them down on the way.
+            HttpStatusCode.BadRequest           => ChatErrorKind.InvalidRequest,
+            HttpStatusCode.NotFound             => ChatErrorKind.InvalidRequest,
+            HttpStatusCode.UnprocessableEntity  => ChatErrorKind.InvalidRequest,
+            _ when status >= 500 && status < 600 => ChatErrorKind.TransientServer,
+            _                                   => ChatErrorKind.MalformedResponse,
         };
 
         return new ChatException(kind, $"HTTP {status}: {message}", retryAfter);

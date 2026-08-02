@@ -36,6 +36,17 @@ public sealed class JsonModelCatalog : IModelCatalog
     {
         var models = await _provider.ListModelsAsync(ct);
         var free = models.Where(m => m.IsFree).ToList();
+
+        if (free.Count == 0)
+        {
+            // Never cache an empty list. Doing so pinned "no models" for the full 24h TTL, and
+            // since every launch then found a valid-but-empty cache, the app stayed broken until
+            // someone deleted %APPDATA%\OpenKey by hand.
+            throw new ChatException(
+                ChatErrorKind.TransientServer,
+                "OpenRouter didn't return any free models. This is usually temporary.");
+        }
+
         var env = new CacheEnvelope(DateTimeOffset.UtcNow, free);
         _memCache = env;
         SaveToDisk(env);
@@ -65,14 +76,23 @@ public sealed class JsonModelCatalog : IModelCatalog
 
     private void SaveToDisk(CacheEnvelope env)
     {
-        _paths.EnsureRoot();
-        var path = _paths.ModelsCacheFile;
-        var tmp = path + ".tmp";
-        using (var stream = File.Create(tmp))
+        // Best-effort: the cache is a speed optimisation, so a full disk or a read-only roaming
+        // profile must not take down a turn that already succeeded.
+        try
         {
-            JsonSerializer.Serialize(stream, env, OpenKeyJsonContext.Default.CacheEnvelope);
+            _paths.EnsureRoot();
+            var path = _paths.ModelsCacheFile;
+            var tmp = path + ".tmp";
+            using (var stream = File.Create(tmp))
+            {
+                JsonSerializer.Serialize(stream, env, OpenKeyJsonContext.Default.CacheEnvelope);
+            }
+            File.Move(tmp, path, overwrite: true);
         }
-        File.Move(tmp, path, overwrite: true);
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Keep running on the in-memory cache.
+        }
     }
 
     // internal, not private: OpenKeyJsonContext must be able to name it.
