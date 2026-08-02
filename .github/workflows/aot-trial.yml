@@ -19,13 +19,31 @@ jobs:
   aot:
     runs-on: windows-latest
 
+    strategy:
+      fail-fast: false          # arm64 failing must not hide an x64 result, or vice versa
+      matrix:
+        rid: [win-x64, win-arm64]
+
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
 
+      # Cross-compiling to arm64 needs the ARM64 C++ build tools, which are a separate component
+      # from the x64 ones. Installing them here rather than finding out during a release.
+      - name: Ensure ARM64 C++ tools
+        if: matrix.rid == 'win-arm64'
+        shell: pwsh
+        run: |
+          $vs = "C:\Program Files (x86)\Microsoft Visual Studio\Installer\vs_installer.exe"
+          $path = & "C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath
+          Write-Host "Visual Studio at: $path"
+          & $vs modify --installPath "$path" --quiet --norestart --nocache `
+            --add Microsoft.VisualStudio.Component.VC.Tools.ARM64 | Out-Null
+          Write-Host "exit: $LASTEXITCODE"
+
       - name: Publish AOT
         run: >
-          dotnet publish src/OpenKey/OpenKey.csproj -c Release -r win-x64
+          dotnet publish src/OpenKey/OpenKey.csproj -c Release -r ${{ matrix.rid }}
           -p:PublishAot=true
           -p:PublishSingleFile=false
           -p:PublishReadyToRun=false
@@ -33,7 +51,7 @@ jobs:
           -o out-aot
 
       - name: Publish the current single-file build for comparison
-        run: dotnet publish src/OpenKey/OpenKey.csproj -c Release -r win-x64 -o out-singlefile
+        run: dotnet publish src/OpenKey/OpenKey.csproj -c Release -r ${{ matrix.rid }} -o out-singlefile
 
       - name: Compare
         shell: pwsh
@@ -51,6 +69,7 @@ jobs:
           Write-Host "loose DLLs beside the AOT exe: $dlls"
 
       - name: Smoke test the AOT binary
+        if: matrix.rid == 'win-x64'      # an arm64 binary cannot execute on an x64 runner
         shell: pwsh
         run: |
           # No key exists on a runner, so first-run setup runs and then aborts on EOF — for which
@@ -71,5 +90,5 @@ jobs:
       - if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: OpenKey-aot-win-x64
+          name: OpenKey-aot-${{ matrix.rid }}
           path: out-aot/OpenKey.exe
