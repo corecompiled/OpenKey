@@ -1,4 +1,6 @@
-using System.Reflection;
+using System.Diagnostics;
+using System.Globalization;
+using System.Text;
 using OpenKey.Core.AppPaths;
 using OpenKey.Core.Engine;
 using OpenKey.Core.Providers;
@@ -15,19 +17,25 @@ public sealed class CommandRouter
     private readonly ChatEngine _engine;
     private readonly IAppPaths _paths;
     private readonly IModelCatalog _catalog;
+    private readonly IConfigStore _config;
     private readonly Func<CancellationToken, Task> _resetAction;
     private readonly Action _clearScreen;
+
+    /// <summary>Set when a command wants the host to resend a message — see <c>/retry</c>.</summary>
+    public string? PendingResend { get; private set; }
 
     public CommandRouter(
         ChatEngine engine,
         IAppPaths paths,
         IModelCatalog catalog,
+        IConfigStore config,
         Func<CancellationToken, Task> resetAction,
         Action clearScreen)
     {
         _engine = engine;
         _paths = paths;
         _catalog = catalog;
+        _config = config;
         _resetAction = resetAction;
         _clearScreen = clearScreen;
     }
@@ -36,8 +44,11 @@ public sealed class CommandRouter
     {
         if (!input.StartsWith('/')) return CommandResult.NotACommand;
 
+        PendingResend = null;
+
         var parts = input.Trim().Split(' ', 2);
         var cmd = parts[0].ToLowerInvariant();
+        var arg = parts.Length > 1 ? parts[1].Trim() : null;
 
         switch (cmd)
         {
@@ -47,6 +58,29 @@ public sealed class CommandRouter
 
             case "/cls":
                 _clearScreen();
+                return CommandResult.Handled;
+
+            case "/new":
+                await StartNewConversationAsync(ct);
+                return CommandResult.Handled;
+
+            case "/retry":
+                return Retry();
+
+            case "/history":
+                ShowHistory();
+                return CommandResult.Handled;
+
+            case "/export":
+                Export(arg);
+                return CommandResult.Handled;
+
+            case "/copy":
+                CopyLastReply();
+                return CommandResult.Handled;
+
+            case "/theme":
+                SetTheme(arg);
                 return CommandResult.Handled;
 
             case "/model":
@@ -91,6 +125,182 @@ public sealed class CommandRouter
                 return CommandResult.Handled;
         }
     }
+
+    /// <summary>
+    /// Clears the conversation but keeps the key. Previously the only way to start fresh was
+    /// <c>/reset</c>, which also deleted the key and forced a new sign-in.
+    /// </summary>
+    private async Task StartNewConversationAsync(CancellationToken ct)
+    {
+        if (!_engine.Turns.Any(t => t.Role != ChatMessage.SystemRole))
+        {
+            Components.HintLine("Already a fresh conversation.");
+            return;
+        }
+
+        await _engine.NewSessionAsync(ct);
+        _clearScreen();
+        Components.SuccessLine("Started a new conversation. Your key is untouched.");
+    }
+
+    private CommandResult Retry()
+    {
+        if (_engine.LastUserMessage is not { } last)
+        {
+            Components.HintLine("Nothing to retry yet — send a message first.");
+            return CommandResult.Handled;
+        }
+
+        PendingResend = last;
+        Components.HintLine($"Resending: {Markup.Escape(Shorten(last, 60))}");
+        return CommandResult.Handled;
+    }
+
+    private void ShowHistory()
+    {
+        var turns = _engine.Turns.Where(t => t.Role != ChatMessage.SystemRole).ToList();
+        if (turns.Count == 0)
+        {
+            Components.HintLine("No messages yet.");
+            return;
+        }
+
+        var table = new Table()
+            .Border(Glyphs.Table)
+            .BorderColor(Color.Grey)
+            .Expand()
+            .AddColumn(new TableColumn($"[{Theme.Strong}]Who[/]").Width(12))
+            .AddColumn(new TableColumn($"[{Theme.Strong}]Message[/]"));
+
+        foreach (var t in turns)
+        {
+            var who = t.Role == ChatMessage.UserRole ? Environment.UserName : "OpenKey AI";
+            var style = t.Role == ChatMessage.UserRole ? Theme.Strong : Theme.Brand;
+            table.AddRow(
+                $"[{style}]{Markup.Escape(who)}[/]",
+                Markup.Escape(Shorten(t.Content.ReplaceLineEndings(" ").Trim(), 400)));
+        }
+
+        AnsiConsole.Write(table);
+        AnsiConsole.WriteLine();
+        Components.HintLine($"{turns.Count} messages. Use /export to save the full text.");
+    }
+
+    private void Export(string? path)
+    {
+        var turns = _engine.Turns.Where(t => t.Role != ChatMessage.SystemRole).ToList();
+        if (turns.Count == 0)
+        {
+            Components.HintLine("Nothing to export yet.");
+            return;
+        }
+
+        // Default to a timestamped file on the Desktop: a non-technical user shouldn't have to
+        // think about paths, and a bare /export should still do something obviously useful.
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            var desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+            var stamp = DateTimeOffset.Now.ToString("yyyy-MM-dd-HHmm", CultureInfo.InvariantCulture);
+            path = Path.Combine(desktop, $"OpenKey-chat-{stamp}.md");
+        }
+
+        try
+        {
+            var full = Path.GetFullPath(path);
+            var dir = Path.GetDirectoryName(full);
+            if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+
+            var sb = new StringBuilder();
+            sb.Append("# OpenKey conversation\n\n");
+            sb.Append(CultureInfo.InvariantCulture, $"Exported {DateTimeOffset.Now:yyyy-MM-dd HH:mm}\n");
+            if (_engine.ActiveModel is { } m)
+                sb.Append(CultureInfo.InvariantCulture, $"Model: {m.Id}\n");
+            sb.Append('\n');
+
+            foreach (var t in turns)
+            {
+                var who = t.Role == ChatMessage.UserRole ? "You" : "OpenKey AI";
+                sb.Append(CultureInfo.InvariantCulture, $"## {who}\n\n{t.Content.TrimEnd()}\n\n");
+            }
+
+            File.WriteAllText(full, sb.ToString());
+            Components.SuccessLine($"Saved to {full}");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            Components.StatusCard(
+                Severity.Warn,
+                "Couldn't save the file",
+                ex.Message,
+                "Try /export with a different location, for example /export C:\\Users\\Me\\chat.md");
+        }
+    }
+
+    /// <summary>
+    /// Copies the last reply via <c>clip.exe</c>. A console app has no clipboard API without
+    /// dragging in a UI framework, and <c>clip.exe</c> ships with Windows.
+    /// </summary>
+    private void CopyLastReply()
+    {
+        var last = _engine.Turns.LastOrDefault(t => t.Role == ChatMessage.AssistantRole);
+        if (last is null)
+        {
+            Components.HintLine("No reply to copy yet.");
+            return;
+        }
+
+        try
+        {
+            var psi = new ProcessStartInfo("clip.exe")
+            {
+                RedirectStandardInput = true,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+            };
+            using var proc = Process.Start(psi);
+            if (proc is null)
+            {
+                Components.HintLine("Couldn't reach the Windows clipboard.");
+                return;
+            }
+
+            proc.StandardInput.Write(last.Content);
+            proc.StandardInput.Close();
+            proc.WaitForExit(5000);
+
+            Components.SuccessLine("Last reply copied to the clipboard.");
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or IOException or InvalidOperationException)
+        {
+            Components.HintLine("Couldn't reach the Windows clipboard.");
+        }
+    }
+
+    private void SetTheme(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            AnsiConsole.MarkupLine(
+                $"Current theme: [{Theme.Brand}]{Markup.Escape(Theme.Current)}[/]");
+            Components.HintLine($"Choose one of: {string.Join(", ", OpenKeyConfigThemes.All)} — for example /theme light");
+            return;
+        }
+
+        var wanted = name.Trim().ToLowerInvariant();
+        if (!Theme.IsKnown(wanted))
+        {
+            Components.HintLine($"There's no \"{Markup.Escape(wanted)}\" theme. Try: {string.Join(", ", OpenKeyConfigThemes.All)}");
+            return;
+        }
+
+        Theme.Apply(wanted);
+        _config.Save(_config.Current with { Theme = wanted });
+        _clearScreen();
+        Components.SuccessLine($"Theme set to {wanted}.");
+    }
+
+    private static string Shorten(string value, int max) =>
+        value.Length <= max ? value : value[..(max - 1)] + Glyphs.Ellipsis;
 
     private void ShowActiveModel()
     {
@@ -195,8 +405,21 @@ public sealed class CommandRouter
         void Row(string cmd, string what) =>
             table.AddRow($"[{Theme.Brand}]{cmd}[/]", what);
 
+        table.AddRow($"[{Theme.Muted}]Chatting[/]", string.Empty);
+        Row("/new", "Start a fresh conversation, keeping your key");
+        Row("/retry", "Send your last message again");
+        Row("/history", "Show the conversation so far");
+        Row("/copy", "Copy the last reply to the clipboard");
+        Row("/export", "Save the conversation as a markdown file");
+
+        table.AddEmptyRow();
+        table.AddRow($"[{Theme.Muted}]Models[/]", string.Empty);
         Row("/models", "Choose which AI model answers you");
         Row("/model", "Show which model is answering right now");
+
+        table.AddEmptyRow();
+        table.AddRow($"[{Theme.Muted}]OpenKey[/]", string.Empty);
+        Row("/theme", "Switch colours: default, dark, light, mono");
         Row("/about", "Show version, where your data lives, and who made this");
         Row("/cls", "Clear the screen");
         Row("/help", "Show this list");
@@ -205,7 +428,7 @@ public sealed class CommandRouter
 
         AnsiConsole.Write(table);
         AnsiConsole.WriteLine();
-        Components.HintLine("Anything that doesn't start with / is sent to the AI.");
+        Components.HintLine("Anything that doesn't start with / is sent to the AI. Press Ctrl+C to stop a reply.");
     }
 }
 

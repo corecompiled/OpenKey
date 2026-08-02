@@ -12,10 +12,22 @@ public sealed class OpenRouterOAuth
 {
     private const string AuthBase = "https://openrouter.ai/auth";
     private const string ExchangeUrl = "https://openrouter.ai/api/v1/auth/keys";
-    private const int CallbackPort = 3000;
-    private const string CallbackUrl = "http://localhost:3000/callback";
-    private const string ListenerPrefix = "http://localhost:3000/callback/";
+    /// <summary>
+    /// Callback ports to try, in order.
+    /// <para>
+    /// The port cannot simply be randomised: OpenRouter upserts an app record keyed by callback
+    /// URL, so a varying callback returns 409. But a <em>small fixed set</em> is fine — each entry
+    /// is a stable URL that can be registered once. Previously port 3000 was the only option, and
+    /// anything else holding it (a dev server, very commonly) left pasting a key as the only route.
+    /// </para>
+    /// </summary>
+    private static readonly int[] CallbackPorts = { 3000, 3123, 8321, 8765 };
+
     private static readonly TimeSpan CallbackTimeout = TimeSpan.FromMinutes(5);
+
+    private static string CallbackUrlFor(int port) => $"http://localhost:{port}/callback";
+
+    private static string ListenerPrefixFor(int port) => $"http://localhost:{port}/callback/";
 
     private readonly HttpClient _http;
 
@@ -25,21 +37,37 @@ public sealed class OpenRouterOAuth
     {
         var pkce = PkceCodes.Generate();
 
-        // Fixed callback URL per OpenRouter docs (recommended for local-first apps).
-        // Varying the callback per attempt causes "Failed to create or update app" 409s server-side.
-        using var listener = new HttpListener();
-        listener.Prefixes.Add(ListenerPrefix);
-        try
+        // Try each known callback port until one binds. Each is a fixed URL, so OpenRouter's
+        // app-record upsert still sees a stable callback and does not 409.
+        HttpListener? bound = null;
+        var boundPort = 0;
+        HttpListenerException? lastBindFailure = null;
+
+        foreach (var port in CallbackPorts)
         {
-            listener.Start();
-        }
-        catch (HttpListenerException ex)
-        {
-            throw new OAuthPortInUseException(CallbackPort, ex);
+            var candidate = new HttpListener();
+            candidate.Prefixes.Add(ListenerPrefixFor(port));
+            try
+            {
+                candidate.Start();
+                bound = candidate;
+                boundPort = port;
+                break;
+            }
+            catch (HttpListenerException ex)
+            {
+                lastBindFailure = ex;
+                candidate.Close();
+            }
         }
 
+        if (bound is null)
+            throw new OAuthPortInUseException(CallbackPorts[0], lastBindFailure!);
+
+        using var listener = bound;
+
         var authUrl =
-            $"{AuthBase}?callback_url={Uri.EscapeDataString(CallbackUrl)}" +
+            $"{AuthBase}?callback_url={Uri.EscapeDataString(CallbackUrlFor(boundPort))}" +
             $"&code_challenge={Uri.EscapeDataString(pkce.CodeChallenge)}" +
             $"&code_challenge_method={PkceCodes.ChallengeMethod}";
 

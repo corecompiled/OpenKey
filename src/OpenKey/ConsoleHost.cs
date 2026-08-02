@@ -24,12 +24,16 @@ public sealed class ConsoleHost
     private readonly IModelCatalog _catalog;
     private readonly IRotationPolicy _rotation;
     private readonly ChatEngine _engine;
+    private readonly IConfigStore _config;
     private readonly HttpClient _http;
 
     private CommandRouter _commands = default!;
 
     private CancellationTokenSource? _turnCts;
     private volatile bool _exiting;
+
+    /// <summary>Shown once per session — a hint repeated on every turn becomes noise.</summary>
+    private bool _shownStopHint;
 
     public ConsoleHost(
         IAppPaths paths,
@@ -38,6 +42,7 @@ public sealed class ConsoleHost
         IModelCatalog catalog,
         IRotationPolicy rotation,
         ChatEngine engine,
+        IConfigStore config,
         HttpClient http)
     {
         _paths = paths;
@@ -46,6 +51,7 @@ public sealed class ConsoleHost
         _catalog = catalog;
         _rotation = rotation;
         _engine = engine;
+        _config = config;
         _http = http;
     }
 
@@ -69,6 +75,7 @@ public sealed class ConsoleHost
         };
 
         ConsoleLayout.Initialize();
+        Theme.Apply(_config.Current.Theme);
 
         // The banner is printed by first-run setup (which needs it) or by the home header (which
         // clears first). Printing it here too showed it twice whenever the screen couldn't be cleared.
@@ -79,7 +86,7 @@ public sealed class ConsoleHost
             return;
         }
 
-        _commands = new CommandRouter(_engine, _paths, _catalog, ResetAllAsync, ClearAndShowChatHeader);
+        _commands = new CommandRouter(_engine, _paths, _catalog, _config, ResetAllAsync, ClearAndShowChatHeader);
 
         ClearAndShowChatHeader();
 
@@ -104,7 +111,13 @@ public sealed class ConsoleHost
 
             var result = await _commands.HandleAsync(line, CancellationToken.None);
             if (result == CommandResult.Exit) break;
-            if (result == CommandResult.Handled) continue;
+            if (result == CommandResult.Handled)
+            {
+                // /retry asks the host to resend rather than sending from the router, so that
+                // resent messages take exactly the same path as typed ones.
+                if (_commands.PendingResend is { } resend) await SendAndRenderAsync(resend);
+                continue;
+            }
 
             await SendAndRenderAsync(line);
         }
@@ -134,10 +147,18 @@ public sealed class ConsoleHost
             ChatChunk? firstText = null;
             var finishedDuringSpinner = false;
 
+            // The backlog asked for a /stop command. A command can't work here — while a reply is
+            // streaming the app isn't reading a prompt — and Ctrl+C already cancels correctly. The
+            // real gap was that nothing said so, so the fix is discoverability, not a new verb.
+            // A key-watcher was considered and rejected: it would swallow type-ahead, and users
+            // routinely start composing their next message while a reply arrives.
+            var stopHint = _shownStopHint ? string.Empty : $"   [{Theme.Muted}](Ctrl+C to stop)[/]";
+            _shownStopHint = true;
+
             await AnsiConsole.Status()
                 .Spinner(Glyphs.Spinner)
                 .SpinnerStyle(new Style(Color.Grey))
-                .StartAsync($"[{Theme.Muted}]Thinking[/]", async _ =>
+                .StartAsync($"[{Theme.Muted}]Thinking[/]{stopHint}", async _ =>
                 {
                     while (await iter.MoveNextAsync())
                     {
@@ -334,8 +355,9 @@ public sealed class ConsoleHost
                 {
                     Components.StatusCard(
                         Severity.Warn,
-                        "Another app is using the sign-in port",
-                        "OpenKey needs port 3000 for a moment to receive the browser sign-in.",
+                        "Browser sign-in isn't available right now",
+                        "OpenKey needs one of a few local ports for a moment to receive the sign-in, "
+                            + "and every one of them is already in use.",
                         "Paste a key instead, or close the other app and try again.");
                     string? pasteKey;
                     try { pasteKey = AcquireKeyViaPaste(); }

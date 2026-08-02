@@ -43,6 +43,14 @@ That restriction is also why there is no capability-degradation machinery here: 
 palette there is nothing to downsample, and Spectre strips colour itself under `NO_COLOR`. A more
 elaborate theme object would be solving a problem this palette does not have.
 
+`/theme` switches between `default`, `dark`, `light` and `mono`, persisted to `config.json` and
+applied once at startup.
+
+**Colour is never the only signal.** Roughly 8% of men cannot reliably separate red from green, so
+every state that uses them also carries a glyph or a worded title — `✓` versus `✗`, and error cards
+that name the problem in their header. `mono` is the standing test of that claim: a unit test
+asserts no hue survives it, so anything that starts relying on colour alone fails the build.
+
 No background colours. Inline code used to be `white on grey23`, which downsampled to white-on-black
 — invisible on light schemes, identical to body text on dark ones. The one style meant to make code
 stand out did nothing.

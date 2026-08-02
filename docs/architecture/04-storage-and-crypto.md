@@ -10,10 +10,12 @@ Everything OpenKey keeps lives under `%APPDATA%\OpenKey\`, typically
 | `session.json` | `JsonSessionStore` | Conversation history |
 | `models.cache.json` | `JsonModelCatalog` | Free model list, 24-hour lifetime |
 | `rotation.state.json` | `RotationPolicy` | Per-model cooldowns |
-| `config.json` | *nobody yet* | Declared in `IAppPaths`, never read or written |
+| `config.json` | `JsonConfigStore` | Theme and model preferences |
 
-`config.json` is the reason a pinned model lasts only until you close the app: there is nowhere to
-put a preference. It is on the backlog and blocks `/theme`.
+`config.json` holds `preferredModels` (a single entry is how a pinned model is expressed), `theme`,
+and `maxTokens`. It is meant to be hand-editable, so every field is normalised on load rather than
+trusted: blank ids dropped, unknown themes reverted, out-of-range token limits reset. A corrupt file
+is quarantined like a corrupt session — preferences are never worth failing a launch over.
 
 ## The key
 

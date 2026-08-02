@@ -7,6 +7,16 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `/new` starts a fresh conversation while keeping you signed in. Previously the only way to clear
+  history was `/reset`, which also deleted your key.
+- `/retry` resends your last message; `/history` shows the conversation; `/copy` puts the last
+  reply on the clipboard; `/export` saves it as markdown, defaulting to your Desktop.
+- `/theme default|dark|light|mono`, remembered between runs. `mono` drops colour entirely for
+  high-contrast setups or screenshots.
+- Preferences are saved, so a model chosen with `/models` now survives a restart.
+- Token counting uses a real tokenizer instead of a character estimate, so conversations are
+  trimmed more accurately as they grow.
+- Browser sign-in falls back across several local ports instead of giving up when one is taken.
 - Replies stream as they arrive. Each completed markdown block is rendered styled, so code fences
   become panels and prose keeps its emphasis, while the still-arriving tail stays plain.
 - Reply header showing which model answered and how long it took.
@@ -22,6 +32,9 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Links whose address contained a bracket lost their target when displayed.
+- A message that kept failing could retry for several minutes; it is now bounded, and a reply
+  that is genuinely arriving is never cut off.
 - **Long replies from slow models always failed.** The HTTP timeout covered reading the response
   body, so a healthy reply that took over 60 seconds was aborted, misread as a network fault, and
   retried on another model that failed the same way. Deadlines now bound the wait for the next
@@ -69,7 +82,9 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Publish settings moved into the project file, so a plain `dotnet publish` produces the shipping
   binary.
 - Windows on ARM (`win-arm64`) is built alongside `win-x64`.
-- Test coverage grew from 11 tests to 65.
+- Test coverage grew from 11 tests to 84.
+- A dependency carrying a known high-severity advisory (`Microsoft.Bcl.Memory` 9.0.4, pulled in
+  transitively) was pinned forward before it could ship.
 
 ## [0.1.0] — 2026-05-28
 

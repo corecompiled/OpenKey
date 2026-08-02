@@ -65,6 +65,7 @@ internal static class Components
             "Type a message and press Enter to chat.\n" +
             "\n" +
             $"[{Theme.Brand}]/models[/]   Choose which AI model answers you\n" +
+            $"[{Theme.Brand}]/new[/]      Start a fresh conversation\n" +
             $"[{Theme.Brand}]/help[/]     See everything OpenKey can do\n" +
             $"[{Theme.Brand}]/quit[/]     Close OpenKey");
 

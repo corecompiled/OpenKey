@@ -138,6 +138,92 @@ public sealed class TranscriptWriterTests
     }
 }
 
+public sealed class MarkdownRenderingTests
+{
+    private static string Render(string markdown)
+    {
+        var output = new StringWriter();
+        var console = AnsiConsole.Create(new AnsiConsoleSettings
+        {
+            Ansi = AnsiSupport.No,
+            ColorSystem = ColorSystemSupport.NoColors,
+            Out = new AnsiConsoleOutput(output),
+        });
+        MarkdownConsoleRenderer.Render(console, markdown);
+        return output.ToString();
+    }
+
+    [Fact]
+    public void KeepsLinksWhoseUrlContainsBrackets()
+    {
+        // The old code filtered out any URL containing a bracket, silently dropping the target.
+        // Brackets are legal in URLs and common in generated ones.
+        var text = Render("See [the docs](https://example.com/a[b]c) for more.");
+
+        Assert.Contains("the docs", text, StringComparison.Ordinal);
+        Assert.Contains("for more.", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ModelOutputCannotInjectConsoleMarkup()
+    {
+        var text = Render("A reply containing [red]alarming[/] markup and [[brackets]].");
+
+        Assert.Contains("alarming", text, StringComparison.Ordinal);
+        Assert.Contains("[red]", text, StringComparison.Ordinal);   // shown literally, not applied
+    }
+
+    [Fact]
+    public void RendersInlineCodeWithoutABackground()
+    {
+        Assert.Contains("value", Render("Set `value` first."), StringComparison.Ordinal);
+    }
+}
+
+public sealed class ThemeTests
+{
+    [Theory]
+    [InlineData("default")]
+    [InlineData("dark")]
+    [InlineData("light")]
+    [InlineData("mono")]
+    public void EveryAdvertisedThemeApplies(string name)
+    {
+        Assert.True(Theme.IsKnown(name));
+        Theme.Apply(name);
+        Assert.Equal(name, Theme.Current);
+        Assert.False(string.IsNullOrWhiteSpace(Theme.Brand));
+        Theme.Apply("default");
+    }
+
+    [Fact]
+    public void UnknownThemesAreRejectedRatherThanSilentlyAccepted()
+    {
+        Assert.False(Theme.IsKnown("neon"));
+    }
+
+    [Fact]
+    public void MonoRemovesHueWithoutRemovingMeaning()
+    {
+        // Accessibility check: severity must never be carried by colour alone. Under mono there is
+        // no hue left, so if this palette is still usable the glyphs and titles are doing the work.
+        Theme.Apply("mono");
+        foreach (var style in new[] { Theme.Ok, Theme.Warn, Theme.Danger, Theme.Brand })
+        {
+            Assert.DoesNotContain("red", style, StringComparison.Ordinal);
+            Assert.DoesNotContain("green", style, StringComparison.Ordinal);
+            Assert.DoesNotContain("yellow", style, StringComparison.Ordinal);
+        }
+        Theme.Apply("default");
+    }
+
+    [Fact]
+    public void SeverityGlyphsDifferSoRedGreenConfusionIsNeverTheOnlySignal()
+    {
+        Assert.NotEqual(Glyphs.Ok, Glyphs.Fail);
+    }
+}
+
 public sealed class TextWidthTests
 {
     [Fact]

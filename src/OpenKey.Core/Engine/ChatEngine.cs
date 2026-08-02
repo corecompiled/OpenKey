@@ -8,12 +8,24 @@ public sealed class ChatEngine
 {
     private const int MaxAttempts = 5;
     private const int ResponseTokenReserve = 1024;
+
+    /// <summary>
+    /// Ceiling on a single message, across every attempt.
+    /// <para>
+    /// The provider bounds each individual read, but five attempts could still stack into several
+    /// minutes of a user staring at a spinner. This bounds the sum: once it is spent, the turn
+    /// stops rotating and reports rather than starting another attempt.
+    /// </para>
+    /// </summary>
+    private static readonly TimeSpan TurnBudget = TimeSpan.FromMinutes(2);
     private const string DefaultSystemPrompt = "You are a helpful assistant.";
 
     private readonly IChatProvider _provider;
     private readonly IRotationPolicy _rotation;
     private readonly IModelCatalog _catalog;
     private readonly ISessionStore _sessions;
+    private readonly IConfigStore _config;
+    private readonly ITokenCounter _tokens;
 
     private readonly List<ChatMessage> _turns = new();
 
@@ -21,17 +33,38 @@ public sealed class ChatEngine
         IChatProvider provider,
         IRotationPolicy rotation,
         IModelCatalog catalog,
-        ISessionStore sessions)
+        ISessionStore sessions,
+        IConfigStore config,
+        ITokenCounter? tokens = null)
     {
         _provider = provider;
         _rotation = rotation;
         _catalog = catalog;
         _sessions = sessions;
+        _config = config;
+        _tokens = tokens ?? new HeuristicTokenCounter();
+        PreferredModelId = config.Current.PinnedModel;
     }
 
     public ModelInfo? ActiveModel { get; private set; }
 
-    public string? PreferredModelId { get; set; }
+    /// <summary>
+    /// Model to try first, or null to let rotation choose. Persisted, so a pin survives a restart —
+    /// it was previously session-scoped only because there was nowhere to store it.
+    /// </summary>
+    public string? PreferredModelId
+    {
+        get;
+        set
+        {
+            if (field == value) return;
+            field = value;
+            _config.Save(_config.Current.WithPinnedModel(value));
+        }
+    }
+
+    /// <summary>The last message the user sent, for <c>/retry</c>. Null before the first turn.</summary>
+    public string? LastUserMessage { get; private set; }
 
     public IReadOnlyList<ChatMessage> Turns => _turns;
 
@@ -65,6 +98,7 @@ public sealed class ChatEngine
     {
         var userTurn = new ChatMessage(ChatMessage.UserRole, userText);
         _turns.Add(userTurn);
+        LastUserMessage = userText;
         var userTurnIndex = _turns.Count - 1;
         var succeeded = false;
 
@@ -73,10 +107,21 @@ public sealed class ChatEngine
         try
         {
             ChatException? lastError = null;
+            var startedAt = DateTimeOffset.UtcNow;
 
             for (int attempt = 1; attempt <= MaxAttempts; attempt++)
             {
                 ct.ThrowIfCancellationRequested();
+
+                // Checked between attempts, never mid-stream: a reply that is actively arriving is
+                // working, however long it has taken, and cutting it off would waste it.
+                if (attempt > 1 && DateTimeOffset.UtcNow - startedAt > TurnBudget)
+                {
+                    lastError ??= new ChatException(
+                        ChatErrorKind.TransientServer,
+                        "Gave up after trying several models.");
+                    break;
+                }
 
                 var candidates = await _catalog.GetFreeModelsAsync(ct);
 
@@ -130,7 +175,7 @@ public sealed class ChatEngine
                 ChatException? thisAttemptError = null;
 
                 var messages = BuildMessagesForModel(model);
-                var request = new ChatRequest(model.Id, messages);
+                var request = new ChatRequest(model.Id, messages, _config.Current.MaxTokens);
 
                 IAsyncEnumerator<ChatChunk>? enumerator = null;
                 try
@@ -261,7 +306,7 @@ public sealed class ChatEngine
         var max = Math.Max(2048, model.ContextLength - ResponseTokenReserve);
         var trimmed = new List<ChatMessage>(_turns);
 
-        while (EstimateTokens(trimmed) > max && trimmed.Count > 2)
+        while (_tokens.Count(trimmed) > max && trimmed.Count > 2)
         {
             int dropIdx = trimmed[0].Role == ChatMessage.SystemRole ? 1 : 0;
             trimmed.RemoveAt(dropIdx);

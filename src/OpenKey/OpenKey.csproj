@@ -22,6 +22,13 @@
 
   <ItemGroup>
     <PackageReference Include="Markdig" Version="1.3.2" />
+    <PackageReference Include="Microsoft.ML.Tokenizers" Version="2.0.0" />
+    <!-- Embeds the vocabulary so token counting needs no network call on first run. -->
+    <PackageReference Include="Microsoft.ML.Tokenizers.Data.Cl100kBase" Version="2.0.0" />
+    <!-- Transitive via Microsoft.ML.Tokenizers, which pins 9.0.4 — a version with a known
+         high-severity advisory (GHSA-73j8-2gch-69rq). Pinned forward explicitly; NuGet audit
+         fails the build if this regresses. -->
+    <PackageReference Include="Microsoft.Bcl.Memory" Version="10.0.10" />
     <PackageReference Include="Spectre.Console" Version="0.57.2" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.10" />
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.10" />

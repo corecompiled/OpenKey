@@ -13,6 +13,7 @@ namespace OpenKey.Core.Storage;
     WriteIndented = true,
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 [JsonSerializable(typeof(SessionSnapshot))]
+[JsonSerializable(typeof(OpenKeyConfig))]
 [JsonSerializable(typeof(JsonModelCatalog.CacheEnvelope))]
 [JsonSerializable(typeof(RotationPolicy.StateEnvelope))]
 internal sealed partial class OpenKeyJsonContext : JsonSerializerContext;

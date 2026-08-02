@@ -314,12 +314,14 @@ src/OpenKey.Pwa/
 
 Flat list of small, non-blocking improvements. Pick off opportunistically. Items here are explicitly **not** on the tier ladder — they're standalone polish that doesn't sequence-block anything else.
 
-- Colour-blind-friendly palette check. The current palette is already restricted to the 16 base
-  ANSI colours and never uses colour as the *only* signal (severity always carries a glyph too),
-  so this is a verification pass rather than a redesign. See
-  [`architecture/06-console-host.md`](architecture/06-console-host.md).
-- Richer banner artwork. Deliberately low priority: the banner is the first thing a non-technical
-  user sees, and calm beats decorative.
+Both seed items are resolved — see [`../BACKLOG.md`](../BACKLOG.md) for detail.
+
+- ~~Colour-blind-friendly palette check~~ — done. Colour is never the only signal, and the `mono`
+  palette is the standing test: a unit test asserts no hue survives it, so anything that starts
+  depending on colour alone fails the build.
+- ~~Richer banner artwork~~ — **deliberately not done.** The console design principle is that calm
+  beats decorative, and the banner is the first thing a non-technical user sees. Art would
+  contradict the design it is meant to serve.
 
 **Execution order and current state live in [`../BACKLOG.md`](../BACKLOG.md).** This file says what
 and why; the backlog says what state each item is in and what happens next.

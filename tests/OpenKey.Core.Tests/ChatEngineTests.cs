@@ -27,7 +27,8 @@ public sealed class ChatEngineTests
         var rotation = new RotationPolicy(paths);
         var catalog = new JsonModelCatalog(paths, provider);
         var sessions = new JsonSessionStore(paths);
-        var engine = new ChatEngine(provider, rotation, catalog, sessions);
+        var config = new JsonConfigStore(paths);
+        var engine = new ChatEngine(provider, rotation, catalog, sessions, config);
         await engine.ResumeAsync(CancellationToken.None);
         return (engine, provider, paths);
     }

@@ -25,6 +25,46 @@ Tier numbers refer to the ladder in [`docs/07-roadmap.md`](docs/07-roadmap.md#ti
 - Repo hygiene: `LICENSE` (MIT), `CHANGELOG.md`, `CONTRIBUTING.md`, `SECURITY.md`, this file, CI
   and release workflows.
 
+### Tier 2 and Tier 3 backlog, plus roadmap Quick Wins — 2026-08-03
+
+- **`/new`** — start a fresh conversation, keeping the key. Was the most conspicuous missing verb:
+  clearing history previously meant `/reset`, which also deleted the key.
+- **`/retry`** — resend the last message. Routed back through the host so a resend takes exactly
+  the same path as a typed message.
+- **`/history`**, **`/export [path]`** (defaults to a timestamped file on the Desktop),
+  **`/copy`** (via `clip.exe` — a console app has no clipboard API without a UI framework).
+- **`/theme default|dark|light|mono`**, persisted.
+- **`config.json`** — `IConfigStore` / `JsonConfigStore`, matching the shape already documented in
+  `docs/05`. A pinned model now survives a restart, which it never could before because there was
+  nowhere to store it. Hand-edited values are normalised rather than trusted.
+- **Real tokenizer** — `ITokenCounter` in Core (so Core keeps its zero package references) with a
+  cl100k-backed implementation in the host. Vocabulary embedded, not downloaded: OpenKey must work
+  on first run behind a captive portal and makes no network call except to OpenRouter.
+- **OAuth port fallback** — four known callback ports tried in order instead of only 3000. Fixed
+  URLs, not random ones, since OpenRouter 409s on a varying callback.
+- **Whole-turn budget** — two minutes across all attempts, checked *between* attempts only: a reply
+  that is actively arriving is working, however long it has taken.
+- **Link URLs escaped** rather than bracket-filtered, which used to silently drop the target of any
+  URL containing a bracket.
+- **Accessibility pass** — verified colour is never the only signal (`✓`/`✗` differ, error cards
+  name the problem in their title), with the `mono` palette as the standing test and a unit test
+  asserting no hue survives it.
+
+Two items were resolved differently from how they were written, both noted here because the
+deviation is the point:
+
+- **`/stop` was not added.** A command cannot work while a reply streams — the app is not reading a
+  prompt — and Ctrl+C already cancels correctly. The real gap was that nothing said so, so the fix
+  is a one-off `(Ctrl+C to stop)` hint. A key-watcher was considered and rejected: it would swallow
+  type-ahead, and people routinely start composing the next message while a reply arrives.
+- **Banner artwork was not added.** The roadmap asked for richer ASCII art; the console design
+  principle is that calm beats decorative, and the banner is the first thing a non-technical user
+  sees. Adding art would contradict the design it is supposed to serve.
+
+Also fixed en route: `Microsoft.ML.Tokenizers` 2.0.0 pulls in `Microsoft.Bcl.Memory` 9.0.4, which
+carries a known high-severity advisory (GHSA-73j8-2gch-69rq). NuGet audit failed the build; pinned
+forward to 10.0.10.
+
 ### v0.1.0 — 2026-05-28
 
 First release. See [`CHANGELOG.md`](CHANGELOG.md#010--2026-05-28).
@@ -35,37 +75,8 @@ First release. See [`CHANGELOG.md`](CHANGELOG.md#010--2026-05-28).
 
 Ordered by user value within tier. Lowest tier wins.
 
-### Tier 2 — exe polish
-
-1. **`/new`** — start a fresh conversation without erasing the key. Today the only way to clear
-   history is `/reset`, which also deletes the key and forces a new sign-in. The most conspicuous
-   missing verb in the app.
-2. **`/stop`** — cancel a running reply without Ctrl+C. Ctrl+C works, but nothing on screen says so.
-3. **`/retry`** — resend the last message, typically after a rotation or an error card.
-4. **`config.json`** — `IAppPaths.ConfigFile` is declared and never read or written, so nothing the
-   user chooses survives a restart. This is why a pinned model lasts only until the app closes.
-   Prerequisite for `/theme` and for a persisted model preference.
-5. **`/export <path>`** — write the conversation to a markdown file.
-6. **`/history`** — paged view of the current conversation.
-
-### Tier 2 — robustness
-
-7. **OAuth port fallback** — port 3000 is fixed and has no alternative; if another app holds it the
-   only route is pasting a key. The port cannot simply be randomised (OpenRouter rejects a varying
-   callback), so this needs a documented set of registered ports.
-8. **Retry budget across a whole turn** — attempts are capped at five, but each carries its own
-   deadline, so a pathological case can still run long.
-9. **Escape link URLs in markdown** — `MarkdownConsoleRenderer` filters `[` and `]` out of URLs
-   instead of escaping them, so a link containing brackets silently loses its target. Not a
-   security issue (literals are escaped), but it is wrong.
-
-### Tier 3 — current UI
-
-10. **`/theme dark|light|mono`** — needs `config.json` first. The palette already lives in one place
-    (`Ui/Theme.cs`), so this is mostly persistence.
-11. **`/copy`** — copy the last reply to the clipboard.
-12. **Token counter** — real tokenizer rather than the current `chars / 4` estimate, which drives
-    context trimming.
+Tier 2 and Tier 3 are complete — see **Done** above. What remains is Tier 4, which is Phase 5 work
+and a step change in scope rather than more polish.
 
 ### Tier 4 — providers
 

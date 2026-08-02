@@ -42,15 +42,21 @@ Full walkthrough: [`docs/08-user-guide.md`](docs/08-user-guide.md).
 
 | Command | Effect |
 |---|---|
+| `/new` | Start a fresh conversation, keeping your key |
+| `/retry` | Send your last message again |
+| `/history` | Show the conversation so far |
+| `/copy` | Copy the last reply to the clipboard |
+| `/export [path]` | Save the conversation as a markdown file |
 | `/models` | Choose which AI model answers you |
 | `/model` | Show which model is answering right now |
+| `/theme` | Switch colours: default, dark, light, mono |
 | `/about` | Version, where your data lives, who made it |
 | `/cls` | Clear the screen |
 | `/help` | List all commands |
 | `/reset` | Erase everything and start over |
 | `/quit` | Close OpenKey (alias: `/exit`) |
 
-Anything not starting with `/` is sent to the AI.
+Anything not starting with `/` is sent to the AI. Ctrl+C stops a reply in progress.
 
 ## Your data
 

@@ -163,15 +163,19 @@ internal static class MarkdownConsoleRenderer
                 var label = new StringBuilder();
                 foreach (var child in link)
                     AppendInline(label, child);
+                // Escape the URL rather than dropping links whose URL contains a bracket. The old
+                // filter silently discarded the target of any such link — legal in a URL, and
+                // common in generated ones.
                 var url = link.Url ?? string.Empty;
-                if (!string.IsNullOrEmpty(url) && !url.Contains('[') && !url.Contains(']'))
-                    sb.Append("[link=").Append(url).Append(']').Append(label).Append("[/]");
+                if (!string.IsNullOrEmpty(url))
+                    sb.Append("[link=").Append(Markup.Escape(url)).Append(']').Append(label).Append("[/]");
                 else
                     sb.Append(label);
                 break;
             }
             case AutolinkInline auto:
-                sb.Append("[link]").Append(Markup.Escape(auto.Url)).Append("[/]");
+                sb.Append("[link=").Append(Markup.Escape(auto.Url)).Append(']')
+                  .Append(Markup.Escape(auto.Url)).Append("[/]");
                 break;
             case LineBreakInline:
                 sb.Append('\n');

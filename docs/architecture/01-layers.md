@@ -23,8 +23,8 @@ layer.
 | Area | Types |
 |---|---|
 | Contracts | `IChatProvider`, `ChatRequest`, `ChatMessage`, `ChatChunk`, `ModelInfo`, `ChatErrorKind`, `ChatException` |
-| Engine | `ChatEngine`, `IRotationPolicy`, `RotationPolicy` |
-| Storage | `IKeyStore`, `ISessionStore`, `IModelCatalog`, `JsonSessionStore`, `JsonModelCatalog`, `OpenKeyJsonContext` |
+| Engine | `ChatEngine`, `IRotationPolicy`, `RotationPolicy`, `ITokenCounter` |
+| Storage | `IKeyStore`, `ISessionStore`, `IModelCatalog`, `IConfigStore`, `JsonSessionStore`, `JsonModelCatalog`, `JsonConfigStore`, `OpenKeyJsonContext` |
 | Paths | `IAppPaths` |
 
 `IAppPaths` deserves a note. It has one required member, `RootDir`, and derives every filename from

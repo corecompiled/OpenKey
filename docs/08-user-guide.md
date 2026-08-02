@@ -45,28 +45,48 @@ picks up where you left off.
 
 | Command | What it does |
 |---|---|
+| `/new` | Start a fresh conversation, keeping your key |
+| `/retry` | Send your last message again |
+| `/history` | Show the conversation so far |
+| `/copy` | Copy the last reply to the clipboard |
+| `/export [path]` | Save the conversation as a markdown file |
 | `/models` | Choose which AI model answers you |
 | `/model` | Show which model is answering right now |
+| `/theme` | Switch colours: default, dark, light, mono |
 | `/about` | Version, where your data lives, who made it |
 | `/cls` | Clear the screen |
 | `/help` | List these commands |
 | `/reset` | Erase everything and start over |
 | `/quit` | Close OpenKey (also `/exit`) |
 
+### `/new` vs `/reset`
+
+`/new` clears the conversation and keeps you signed in. That's what you want most of the time.
+
+`/reset` erases *everything*, including your key, and makes you sign in again. Use it only when
+your key stopped working or you want to switch accounts.
+
+### `/export`
+
+`/export` on its own saves to your Desktop with a timestamped name. Give it a path to choose where:
+
+```
+/export C:\Users\Me\Documents\notes.md
+```
+
+### `/theme`
+
+`default` and `dark` suit a dark terminal, `light` suits a white background, and `mono` drops
+colour entirely — useful for screenshots, high-contrast setups, or if colour is hard to
+distinguish. Your choice is remembered. `/theme` on its own shows the current one.
+
 ### `/models`
 
 Lists every free model, with its context size — roughly how much conversation it can hold at once.
 Arrow keys to move, Enter to choose.
 
-Picking one pins it until you close OpenKey. Choose **Auto** to let OpenKey pick the best available
-model for each message, which is the default and usually what you want.
-
-### `/reset`
-
-Deletes your saved key **and your entire conversation history**, then starts setup again. It tells
-you this and asks to confirm first, and never assumes yes.
-
-Use it if your key stopped working or you want to sign in with a different account.
+Picking one sticks — including next time you open OpenKey. Choose **Auto** to hand the choice back
+to OpenKey, which is the default and usually what you want.
 
 ## Why the model sometimes changes
 
@@ -87,6 +107,7 @@ path.
 | `key.bin` | Your key, encrypted for your Windows account |
 | `session.json` | Your conversation |
 | `models.cache.json` | The model list, refreshed daily |
+| `config.json` | Your theme and model preferences |
 | `rotation.state.json` | Which models are busy |
 
 Your key is encrypted so that only your Windows account on this PC can read it — copying the file
@@ -111,8 +132,9 @@ it detects that.
 **"Every free model is busy right now."** Wait a minute and resend, or use `/models` to pick one
 directly.
 
-**"Another app is using the sign-in port."** Something else holds port 3000, which OpenKey needs
-briefly during browser sign-in. Close it, or paste a key instead.
+**"Browser sign-in isn't available right now."** OpenKey needs one of a few local ports for a
+moment to receive the sign-in, and all of them are in use. Paste a key instead, or close whatever is
+holding them.
 
 **Boxes or question marks instead of symbols.** You're in the older console. OpenKey normally
 detects this and uses plain characters; if it slips through, run it from Windows Terminal.
@@ -134,5 +156,5 @@ to one Windows account on one machine.
 
 **Is my conversation sent anywhere?** Only to OpenRouter, to generate replies. Nowhere else.
 
-**How do I start a fresh conversation without losing my key?** Not possible yet — `/reset` is
-currently all-or-nothing. A `/new` command is planned; see [`../BACKLOG.md`](../BACKLOG.md).
+**How do I start a fresh conversation without losing my key?** `/new`. `/reset` is the
+all-or-nothing one.

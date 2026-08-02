@@ -68,9 +68,14 @@ Before each attempt, `BuildMessagesForModel` drops the oldest non-system message
 estimated token count fits the chosen model's context, reserving room for the reply. The system
 prompt is never dropped.
 
-The estimate is `(role.Length + content.Length) / 4 + 4` per message. It is crude and deliberately
-conservative — a real tokenizer is on the backlog. Trimming happens per attempt rather than once,
-because rotation can land on a model with a very different context size.
+Counting goes through `ITokenCounter`. The interface exists because Core has no package references
+and a real tokenizer needs a vocabulary, so the host supplies a cl100k-backed implementation and
+Core falls back to a four-characters-per-token heuristic when none is given.
+
+cl100k is a GPT-family encoding while the free tier is mostly Llama, Qwen, DeepSeek and Mistral, so
+it is close rather than exact — which is fine, because this only decides how much history to drop.
+Trimming happens per attempt rather than once, since rotation can land on a model with a very
+different context size.
 
 ## What the user sees
 

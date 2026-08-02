@@ -31,6 +31,8 @@ services.AddSingleton<IChatProvider>(sp =>
 });
 
 services.AddSingleton<IModelCatalog, JsonModelCatalog>();
+services.AddSingleton<IConfigStore, JsonConfigStore>();
+services.AddSingleton<ITokenCounter, TiktokenCounter>();
 services.AddSingleton<ChatEngine>();
 services.AddSingleton<ConsoleHost>();
 
