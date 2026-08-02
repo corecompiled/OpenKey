@@ -76,6 +76,30 @@ public sealed class TranscriptWriterTests
         Assert.DoesNotContain("```", text, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void NeverShowsRawBackticksWhateverTheConsoleSupports(bool ansi)
+    {
+        // A single delta can carry both fence markers, which nets to "not inside a fence". That
+        // used to let a whole code block reach the screen as raw markdown before the flush
+        // replaced it — and it only reproduced on consoles that allow raw streaming, so it passed
+        // locally and failed in CI.
+        var output = new StringWriter();
+        var console = AnsiConsole.Create(new AnsiConsoleSettings
+        {
+            Ansi = ansi ? AnsiSupport.Yes : AnsiSupport.No,
+            ColorSystem = ColorSystemSupport.NoColors,
+            Out = new AnsiConsoleOutput(output),
+        });
+
+        var writer = new TranscriptWriter(console);
+        writer.Append("```python\nfirst = 1\n\nsecond = 2\n```\n");
+        writer.Complete();
+
+        Assert.DoesNotContain("```", output.ToString(), StringComparison.Ordinal);
+    }
+
     [Fact]
     public void RendersAnUnterminatedFenceOnComplete()
     {

@@ -41,16 +41,21 @@ internal sealed class TranscriptWriter
     private int _blocksRendered;
 
     /// <summary>
-    /// Whether this writer may stream raw text and erase it again. Judged from the console it was
-    /// handed rather than global state, so a redirected or in-memory console behaves correctly
-    /// without any ambient setup.
+    /// Whether this writer may stream raw text and erase it again.
+    /// <para>
+    /// Judged <em>solely</em> from the console it was handed. It previously also consulted
+    /// <c>ConsoleLayout.Rich</c>, which is global mutable state no caller controls — so the same
+    /// code streamed raw text on one machine and not on another, and the tests could not pin it
+    /// down. <c>caps.Ansi</c> is already false whenever output is redirected, which is the only
+    /// thing the global added.
+    /// </para>
     /// </summary>
     private readonly bool _canRewind;
 
     public TranscriptWriter(IAnsiConsole console)
     {
         _console = console;
-        _canRewind = console.Profile.Capabilities.Ansi && ConsoleLayout.Rich;
+        _canRewind = console.Profile.Capabilities.Ansi;
         _blockWidth = ConsoleLayout.CurrentWidth();
     }
 
@@ -63,11 +68,12 @@ internal sealed class TranscriptWriter
 
         _pending.Append(delta);
 
-        // Inside a fence, stream nothing: a code block is the case most likely to outgrow the
-        // viewport, and a partially-drawn fence cannot be erased once it scrolls. Buffer it and
-        // render the panel whole.
+        // Never stream a fence raw, and note the test is "does the pending text contain a fence
+        // marker at all", not "are we currently inside one". A single delta can carry both the
+        // opening and closing marker, which nets to not-inside — and that used to let a whole
+        // code block reach the screen as raw backticks before the flush replaced it.
         UpdateFenceState(delta);
-        if (!_inFence) WriteRaw(delta);
+        if (!_inFence && !HasFenceMarker()) WriteRaw(delta);
 
         FlushCompletedBlocks();
     }
@@ -149,6 +155,15 @@ internal sealed class TranscriptWriter
         }
 
         return -1;
+    }
+
+    private bool HasFenceMarker()
+    {
+        for (var i = 0; i + 2 < _pending.Length; i++)
+        {
+            if (_pending[i] == '`' && _pending[i + 1] == '`' && _pending[i + 2] == '`') return true;
+        }
+        return false;
     }
 
     private void UpdateFenceState(string delta)
