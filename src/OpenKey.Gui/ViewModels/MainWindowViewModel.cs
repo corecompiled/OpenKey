@@ -48,6 +48,9 @@ public sealed class MainWindowViewModel : ObservableObject
         _http = http;
 
         Messages.CollectionChanged += (_, _) => Raise(nameof(IsConversationEmpty));
+
+        StopCommand = new RelayCommand(Stop);
+        ClearCommand = new RelayCommand(() => _ = ClearConversationAsync());
     }
 
     public ObservableCollection<MessageViewModel> Messages { get; } = new();
@@ -55,7 +58,23 @@ public sealed class MainWindowViewModel : ObservableObject
     /// <summary>Drives the empty-state prompt. A bare Count cannot bind to IsVisible.</summary>
     public bool IsConversationEmpty => Messages.Count == 0;
 
-    public ObservableCollection<ModelInfo> Models { get; } = new();
+    public ObservableCollection<ModelChoice> Models { get; } = new();
+
+    private ModelChoice? _selectedModel;
+
+    /// <summary>
+    /// Two-way bound so the picker reflects the saved choice on launch instead of showing a
+    /// placeholder while a model is actually pinned.
+    /// </summary>
+    public ModelChoice? SelectedModel
+    {
+        get => _selectedModel;
+        set
+        {
+            if (!Set(ref _selectedModel, value) || value is null) return;
+            PinModel(value.Model);
+        }
+    }
 
     public string Version { get; } =
         (typeof(MainWindowViewModel).Assembly
@@ -151,8 +170,18 @@ public sealed class MainWindowViewModel : ObservableObject
         try
         {
             var models = await _catalog.GetFreeModelsAsync(CancellationToken.None);
+
             Models.Clear();
-            foreach (var m in models) Models.Add(m);
+            Models.Add(ModelChoice.Automatic);
+            foreach (var m in models) Models.Add(ModelChoice.For(m));
+
+            // Reflect what is actually saved. Assigning the backing field directly avoids the
+            // setter re-pinning the value we just read.
+            var pinned = _engine.PreferredModelId;
+            _selectedModel = pinned is null
+                ? ModelChoice.Automatic
+                : Models.FirstOrDefault(c => c.Model?.Id == pinned) ?? ModelChoice.Automatic;
+            Raise(nameof(SelectedModel));
         }
         catch (ChatException ex)
         {
@@ -251,6 +280,13 @@ public sealed class MainWindowViewModel : ObservableObject
         Draft = string.Empty;
         Status = null;
 
+        if (_clearedTurns is not null)
+        {
+            _clearedTurns = null;
+            _clearedMessages = null;
+            Raise(nameof(CanUndoClear));
+        }
+
         Messages.Add(new MessageViewModel(Speaker.You, text));
 
         var reply = new MessageViewModel(Speaker.Assistant) { IsStreaming = true };
@@ -320,6 +356,12 @@ public sealed class MainWindowViewModel : ObservableObject
     }
 
     public void Stop() => Volatile.Read(ref _turnCts)?.Cancel();
+
+    // Commands exist only so the window's KeyBindings have something to bind to; every button
+    // calls the methods directly.
+    public System.Windows.Input.ICommand StopCommand { get; }
+
+    public System.Windows.Input.ICommand ClearCommand { get; }
 
     /// <summary>Resends the last message. Goes through SendAsync so a retry takes the same path.</summary>
     public async Task RetryAsync()
@@ -403,12 +445,55 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public void NotifyStatus(StatusKind kind, string message) => Show(kind, message);
 
-    public async Task NewConversationAsync()
+    private IReadOnlyList<ChatMessage>? _clearedTurns;
+    private MessageViewModel[]? _clearedMessages;
+
+    /// <summary>True while a cleared conversation can still be brought back.</summary>
+    public bool CanUndoClear => _clearedTurns is not null;
+
+    /// <summary>
+    /// Clears the conversation, keeping the key.
+    /// <para>
+    /// This deletes the only conversation OpenKey stores, so it is offered with undo rather than
+    /// behind a confirmation. A dialog interrupts everyone every time to guard against a mistake
+    /// that is rare; undo costs nothing until the moment it is needed, and then it costs one
+    /// click. The button is also labelled "Clear chat" rather than "New chat" — the latter implies
+    /// the old conversation is still somewhere, and it is not.
+    /// </para>
+    /// </summary>
+    public async Task ClearConversationAsync()
     {
         if (IsBusy) return;
+
+        if (Messages.Count == 0)
+        {
+            Show(StatusKind.Info, "This chat is already empty.");
+            return;
+        }
+
+        _clearedTurns = _engine.Turns.ToArray();
+        _clearedMessages = Messages.ToArray();
+
         await _engine.NewSessionAsync(CancellationToken.None);
         Messages.Clear();
-        Show(StatusKind.Ok, "Started a new conversation. Your key is untouched.");
+
+        Raise(nameof(CanUndoClear));
+        Show(StatusKind.Ok, "Chat cleared. Your key is untouched.");
+    }
+
+    public async Task UndoClearAsync()
+    {
+        if (_clearedTurns is null || _clearedMessages is null) return;
+
+        await _engine.RestoreTurnsAsync(_clearedTurns, CancellationToken.None);
+
+        Messages.Clear();
+        foreach (var m in _clearedMessages) Messages.Add(m);
+
+        _clearedTurns = null;
+        _clearedMessages = null;
+        Raise(nameof(CanUndoClear));
+        Show(StatusKind.Ok, "Chat restored.");
     }
 
     public void PinModel(ModelInfo? model)

@@ -8,12 +8,19 @@
         x:DataType="vm:MainWindowViewModel"
         Title="OpenKey"
         Width="900" Height="680"
-        MinWidth="480" MinHeight="420"
+        MinWidth="560" MinHeight="420"
         Background="{DynamicResource Surface}">
 
   <Window.Resources>
     <conv:StatusBrushConverter x:Key="StatusBrush" />
   </Window.Resources>
+
+  <!-- Window-level so they work wherever focus happens to be. Escape stopping a reply matters
+       most: it is the one thing someone reaches for in a hurry. -->
+  <Window.KeyBindings>
+    <KeyBinding Gesture="Escape" Command="{Binding StopCommand}" />
+    <KeyBinding Gesture="Ctrl+L" Command="{Binding ClearCommand}" />
+  </Window.KeyBindings>
 
   <Window.Styles>
     <Style Selector="Button.primary">
@@ -48,24 +55,27 @@
         </StackPanel>
 
         <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" IsVisible="{Binding IsReady}">
+
+          <!-- Conversation actions only. Settings live behind the menu at the end, so a per-app
+               preference is never wedged between per-conversation verbs. -->
           <ComboBox ItemsSource="{Binding Models}"
-                    PlaceholderText="Automatic"
-                    MinWidth="220"
-                    SelectionChanged="OnModelChanged"
+                    SelectedItem="{Binding SelectedModel}"
+                    MinWidth="210"
                     ToolTip.Tip="Choose which model answers you">
             <ComboBox.ItemTemplate>
-              <DataTemplate x:DataType="core:ModelInfo">
+              <DataTemplate x:DataType="vm:ModelChoice">
                 <StackPanel Orientation="Horizontal" Spacing="8">
-                  <TextBlock Text="{Binding DisplayName}" />
-                  <TextBlock Text="{Binding ContextLength, StringFormat='{}{0:N0} ctx'}"
+                  <TextBlock Text="{Binding Label}" VerticalAlignment="Center" />
+                  <TextBlock Text="{Binding Detail}" IsVisible="{Binding HasDetail}"
                              Foreground="{DynamicResource Muted}" FontSize="11"
                              VerticalAlignment="Center" />
                 </StackPanel>
               </DataTemplate>
             </ComboBox.ItemTemplate>
           </ComboBox>
-          <Button Classes="ghost" Content="New chat" Click="OnNewChat"
-                  ToolTip.Tip="Start a fresh conversation, keeping your key" />
+
+          <Button Classes="ghost" Content="Clear" Click="OnClearChat"
+                  ToolTip.Tip="Clear this chat, keeping your key (Ctrl+L)" />
           <Button Classes="ghost" Content="Retry" Click="OnRetry"
                   IsEnabled="{Binding IsIdle}"
                   ToolTip.Tip="Send your last message again" />
@@ -74,14 +84,26 @@
           <Button Classes="ghost" Content="Export" Click="OnExport"
                   ToolTip.Tip="Save this conversation as a markdown file" />
 
-          <ComboBox Name="ThemePicker" ItemsSource="{Binding Themes}" MinWidth="96"
-                    SelectionChanged="OnThemeChanged"
-                    ToolTip.Tip="Change colours" />
-
-          <Button Classes="ghost" Content="About" Click="OnAbout"
-                  ToolTip.Tip="Version, where your data lives, who made this" />
-          <Button Classes="ghost" Content="Erase all" Click="OnResetClicked"
-                  ToolTip.Tip="Erase your key and all history" />
+          <Button Classes="ghost" Content="&#x22EF;" FontSize="16" Padding="10,2"
+                  ToolTip.Tip="Settings">
+            <Button.Flyout>
+              <MenuFlyout Placement="BottomEdgeAlignedRight">
+                <MenuItem Header="Theme">
+                  <MenuItem Header="Default" Click="OnThemeMenu" Tag="default" />
+                  <MenuItem Header="Dark" Click="OnThemeMenu" Tag="dark" />
+                  <MenuItem Header="Light" Click="OnThemeMenu" Tag="light" />
+                  <MenuItem Header="Mono" Click="OnThemeMenu" Tag="mono" />
+                </MenuItem>
+                <Separator />
+                <MenuItem Header="About OpenKey" Click="OnAbout" />
+                <Separator />
+                <!-- Destructive, so it sits alone at the bottom behind a menu, where it cannot be
+                     hit while reaching for Export. -->
+                <MenuItem Header="Erase everything…" Click="OnResetClicked"
+                          Foreground="{DynamicResource Danger}" />
+              </MenuFlyout>
+            </Button.Flyout>
+          </Button>
         </StackPanel>
       </Grid>
     </Border>
@@ -186,11 +208,17 @@
                 Background="{DynamicResource CodeSurface}"
                 BorderThickness="0,0,0,2"
                 BorderBrush="{Binding StatusKind, Converter={StaticResource StatusBrush}}">
-          <Grid ColumnDefinitions="*,Auto">
+          <Grid ColumnDefinitions="*,Auto,Auto">
             <TextBlock Grid.Column="0" Text="{Binding Status}" TextWrapping="Wrap"
+                       VerticalAlignment="Center"
                        Foreground="{DynamicResource Body}" FontSize="12" />
-            <Button Grid.Column="1" Classes="ghost" Content="✕" Click="OnDismissStatus"
-                    Padding="6,0" FontSize="11" />
+            <!-- Undo lives in the message that announced the loss, which is where someone who has
+                 just realised their mistake is already looking. -->
+            <Button Grid.Column="1" Classes="ghost" Content="Undo" Click="OnUndoClear"
+                    IsVisible="{Binding CanUndoClear}"
+                    Foreground="{DynamicResource Brand}" FontSize="12" Padding="8,2" />
+            <Button Grid.Column="2" Classes="ghost" Content="✕" Click="OnDismissStatus"
+                    Padding="6,0" FontSize="11" VerticalAlignment="Center" />
           </Grid>
         </Border>
 
@@ -202,7 +230,6 @@
                    TextWrapping="Wrap"
                    MaxHeight="160"
                    VerticalContentAlignment="Center"
-                   KeyDown="OnComposerKeyDown"
                    Margin="0,0,8,0" />
 
           <Button Grid.Column="1" Classes="primary" Content="Send"
@@ -212,7 +239,7 @@
                   Click="OnStop" IsVisible="{Binding IsBusy}" VerticalAlignment="Bottom" />
         </Grid>
 
-        <TextBlock Text="Enter sends · Shift+Enter adds a line" FontSize="11"
+        <TextBlock Text="Enter sends · Shift+Enter adds a line · Esc stops · Ctrl+L clears" FontSize="11"
                    Foreground="{DynamicResource Muted}" />
       </StackPanel>
     </Border>

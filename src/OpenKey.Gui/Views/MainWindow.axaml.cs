@@ -19,34 +19,57 @@ public partial class MainWindow : Window
 
     private MainWindowViewModel Vm => (MainWindowViewModel)DataContext!;
 
+    /// <summary>
+    /// Whether the view should stay pinned to the newest content. Cleared when the reader scrolls
+    /// up, restored when they come back down or send something.
+    /// </summary>
+    private bool _followTail = true;
+
     public MainWindow()
     {
         InitializeComponent();
 
-        // Keep the newest message in view as a reply streams in, but only when the user is already
-        // at the bottom — yanking the view back while they are reading earlier text is worse than
-        // not following at all.
         if (this.FindControl<ScrollViewer>("Scroller") is { } scroller)
         {
-            scroller.ScrollChanged += (_, _) => { };
+            // Following is a mode the reader controls, not a fixed rule. Scrolling up to re-read
+            // turns it off so a streaming reply can't yank the page away; coming back to the
+            // bottom turns it on again. Sending is an explicit action and always re-arms it.
+            scroller.ScrollChanged += (_, _) => _followTail = IsNearBottom(scroller);
+
             DispatcherTimer.Run(() =>
             {
-                if (Vm is { IsBusy: true } && IsNearBottom(scroller)) scroller.ScrollToEnd();
+                if (Vm is { IsBusy: true } && _followTail) scroller.ScrollToEnd();
                 return true;
             }, TimeSpan.FromMilliseconds(120));
         }
+    }
+
+    /// <summary>
+    /// Jumps to the newest message. Posted rather than called directly: the message has just been
+    /// added and the layout pass that gives it a height has not run yet, so scrolling now would
+    /// stop short of the real bottom.
+    /// </summary>
+    private void ScrollToBottomSoon()
+    {
+        _followTail = true;
+        if (this.FindControl<ScrollViewer>("Scroller") is not { } scroller) return;
+
+        Dispatcher.UIThread.Post(scroller.ScrollToEnd, DispatcherPriority.Background);
     }
 
     private void InitializeComponent()
     {
         AvaloniaXamlLoader.Load(this);
 
-        // Reflect the persisted theme without firing SetTheme back at the view model.
-        Opened += (_, _) =>
-        {
-            if (this.FindControl<ComboBox>("ThemePicker") is { } picker)
-                picker.SelectedItem = Vm.Theme;
-        };
+        // Enter must be intercepted on the TUNNEL route. AcceptsReturn="True" makes the TextBox
+        // handle Enter itself and insert a newline, and that happens before a bubbling KeyDown
+        // handler ever runs — so setting e.Handled there is too late and Enter behaves exactly
+        // like Shift+Enter.
+        if (this.FindControl<TextBox>("Composer") is { } composer)
+            composer.AddHandler(KeyDownEvent, OnComposerKeyDown, RoutingStrategies.Tunnel);
+
+        // A chat window should be ready to type in the moment it opens.
+        Opened += (_, _) => FocusComposer();
     }
 
     private static bool IsNearBottom(ScrollViewer scroller) =>
@@ -58,14 +81,41 @@ public partial class MainWindow : Window
         if (e.Key != Key.Enter || e.KeyModifiers.HasFlag(KeyModifiers.Shift)) return;
 
         e.Handled = true;
+        ScrollToBottomSoon();
         await Vm.SendAsync();
     }
 
-    private async void OnSend(object? sender, RoutedEventArgs e) => await Vm.SendAsync();
+    private async void OnSend(object? sender, RoutedEventArgs e)
+    {
+        ScrollToBottomSoon();
+        await Vm.SendAsync();
+    }
 
     private void OnStop(object? sender, RoutedEventArgs e) => Vm.Stop();
 
-    private async void OnNewChat(object? sender, RoutedEventArgs e) => await Vm.NewConversationAsync();
+    private async void OnClearChat(object? sender, RoutedEventArgs e)
+    {
+        await Vm.ClearConversationAsync();
+        ScrollToBottomSoon();
+        FocusComposer();
+    }
+
+    private async void OnUndoClear(object? sender, RoutedEventArgs e)
+    {
+        await Vm.UndoClearAsync();
+        ScrollToBottomSoon();
+    }
+
+    private void OnThemeMenu(object? sender, RoutedEventArgs e)
+    {
+        if (sender is MenuItem { Tag: string theme }) Vm.SetTheme(theme);
+    }
+
+    /// <summary>
+    /// Typing is what someone does next in a chat window, so the caret goes back there after any
+    /// action that isn't itself about typing.
+    /// </summary>
+    private void FocusComposer() => this.FindControl<TextBox>("Composer")?.Focus();
 
     private async void OnSignIn(object? sender, RoutedEventArgs e) => await Vm.SignInWithBrowserAsync();
 
@@ -73,12 +123,11 @@ public partial class MainWindow : Window
 
     private void OnDismissStatus(object? sender, RoutedEventArgs e) => Vm.DismissStatus();
 
-    private void OnModelChanged(object? sender, SelectionChangedEventArgs e)
+    private async void OnRetry(object? sender, RoutedEventArgs e)
     {
-        if (sender is ComboBox { SelectedItem: ModelInfo model }) Vm.PinModel(model);
+        ScrollToBottomSoon();
+        await Vm.RetryAsync();
     }
-
-    private async void OnRetry(object? sender, RoutedEventArgs e) => await Vm.RetryAsync();
 
     private async void OnCopyLast(object? sender, RoutedEventArgs e)
     {
@@ -126,11 +175,6 @@ public partial class MainWindow : Window
         {
             Vm.NotifyStatus(StatusKind.Warn, "Couldn't save there. Try a different folder.");
         }
-    }
-
-    private void OnThemeChanged(object? sender, SelectionChangedEventArgs e)
-    {
-        if (sender is ComboBox { SelectedItem: string theme }) Vm.SetTheme(theme);
     }
 
     private async void OnAbout(object? sender, RoutedEventArgs e)
