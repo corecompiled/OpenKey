@@ -29,6 +29,44 @@ For `win-arm64`, also add `Microsoft.VisualStudio.Component.VC.Tools.ARM64`.
 Without it you get *"Platform linker not found"*. **`dotnet build`, `dotnet test` and `dotnet run`
 are unaffected** — only publishing needs this.
 
+A present `link.exe` does not mean the workload is installed: a Visual Studio install can leave a
+compiler stub with no import libraries and no Windows SDK, which fails exactly the same way. Verify
+what the compiler actually probes for rather than looking for the linker:
+
+```powershell
+& "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" `
+    -latest -prerelease -products * `
+    -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+```
+
+Empty output means the workload is missing, whatever else is on disk. That command is the same
+query `findvcvarsall.bat` in the `microsoft.dotnet.ilcompiler` package runs — note it already
+passes `-prerelease`, so a preview Visual Studio is not the problem.
+
+### Prerequisite: `vswhere.exe` on `PATH`
+
+```
+C:\Program Files (x86)\Microsoft Visual Studio\Installer
+```
+
+Add that directory to `PATH`. Without it, publishing fails with a linker command that begins
+`'vswhere.exe' is not recognized...` **even though the workload is installed correctly** — which
+reads like a missing linker and is not one.
+
+The cause is worth knowing, because nothing about the message points at it. `findvcvarsall.bat`
+calls `vcvarsall.bat`, which looks up `vswhere` on `PATH`; when that fails it prints to stderr and
+carries on, so the script still exits 0 with the right answer on stdout. But the compiler captures
+it with MSBuild's `ConsoleToMSBuild`, which **merges stderr into stdout**, and then takes
+`Split('#')[0]` as the linker directory. That slice is the error text rather than the path, so the
+compiler invokes a command built out of an error message.
+
+Diagnose by running the script directly — it should print exactly two lines, a path ending in `#`
+and a `LIB` list. Any line before those is the fault:
+
+```powershell
+cmd /c "`"$env:USERPROFILE\.nuget\packages\microsoft.dotnet.ilcompiler\10.0.5\build\findvcvarsall.bat`" x64"
+```
+
 For Windows on ARM, swap the RID:
 
 ```cmd
@@ -57,9 +95,25 @@ All set in `OpenKey.csproj`, not on the command line.
 | `SelfContained` | Implied by AOT; stated for clarity. The user needs nothing installed. |
 | `RuntimeIdentifiers` | `win-x64;win-arm64`. |
 | `InvariantGlobalization=false` | LLM replies are full of non-ASCII text. Costs ICU in the bundle; a deliberate trade. |
+| `ApplicationIcon` | `assets/openkey.ico`, the same file for both executables — one product, two front doors. The SDK writes it into the PE's Win32 resource table ahead of the AOT link, so it survives `PublishAot`. |
 
 `IsAotCompatible` is gone — it existed to surface trim/AOT warnings without committing to AOT, and
 `PublishAot` implies the same analyzers.
+
+### The icon is a committed artefact, not a build step
+
+`assets/openkey.ico` is checked in. Nothing in the build generates it, so the publish pipeline
+needs no image toolchain. Regenerate it by hand after a change to the mark or the brand colour:
+
+```powershell
+.\tools\make-icon.ps1
+```
+
+The script uses only `System.Drawing` from the .NET Framework GAC — present on every Windows box,
+nothing to install. It writes seven sizes (16, 20, 24, 32, 48, 64, 256): BMP entries below 256 and
+PNG at 256, which is the layout real icon tooling emits. PNG at every size is legal on Windows 10
+and later but is not universally decodable — `System.Drawing.Icon` refuses such a file outright,
+which is fair warning about other consumers.
 
 ## AOT, and why the old objection expired
 

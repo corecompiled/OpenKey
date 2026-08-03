@@ -1,0 +1,38 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="OpenKey.Gui.Views.Brandmark">
+
+  <!--
+    The letter K pulled open: a full-height stem with the arms detached and floating clear of
+    it as a chevron, so the letter reads as an opening rather than a closed form.
+
+    Not a key. Every credential manager on Windows — 1Password, Bitwarden, KeePass, Keeper —
+    owns a key or keyhole mark in exactly the 16px taskbar slot OpenKey ships into, so a key
+    here would not read "AI client", it would read "password manager". It also inverts the
+    promise: a key means "I hold something shut", while OpenKey removes an obstacle. The
+    negative space between stem and chevron is a keyway profile — the key is present as the
+    hole, and is never drawn.
+
+    Geometry on a 24-unit grid: ink box 3–21 on both axes, stroke 3u, arms at 45°, gap 4.44u
+    (= 1.5 × stroke, which is what is left over once a full-height 45° chevron and the stem
+    are placed against the edges of an 18u box — derived, not chosen). Arm endpoints sit at
+    4.06 / 19.94 rather than 4 / 20 because the perpendicular flat cap overshoots vertically
+    by 1.5·sin45° = 1.06u; pulling them in lands the tips flush with the stem at y=3 and y=21.
+    That costs 0.2° of arm angle, which nobody sees, and buys a flush edge, which everybody
+    does. Stroke weight is deliberately identical on both elements, so the mark stays
+    redrawable by hand.
+
+    Stroke binds to Brand in all four themes. mono is the proof case and passes trivially:
+    Brand goes achromatic, the mark becomes plain foreground, and nothing is lost, because
+    the mark never carried meaning in its hue.
+  -->
+  <Viewbox Stretch="Uniform">
+    <Canvas Width="24" Height="24">
+      <Path Data="M4.5 3 V21 M11.5 4.06 L19.5 12 L11.5 19.94"
+            Stroke="{DynamicResource Brand}"
+            StrokeThickness="3"
+            StrokeLineCap="Flat"
+            StrokeJoin="Round" />
+    </Canvas>
+  </Viewbox>
+</UserControl>

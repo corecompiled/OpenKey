@@ -6,7 +6,7 @@
     <AssemblyName>OpenKey</AssemblyName>
     <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
     <InvariantGlobalization>false</InvariantGlobalization>
-    <ApplicationIcon></ApplicationIcon>
+    <ApplicationIcon>../../assets/openkey.ico</ApplicationIcon>
 
     <!-- Publish profile lives here, not in README prose. A bare `dotnet publish -c Release -r win-x64`
          must produce the same artifact that gets smoke-tested and shipped. See docs/06.
