@@ -53,6 +53,7 @@ picks up where you left off.
 | `/models` | Choose which AI model answers you |
 | `/model` | Show which model is answering right now |
 | `/theme` | Switch colours: default, dark, light, mono |
+| `/name` | Change what OpenKey calls you |
 | `/about` | Version, where your data lives, who made it |
 | `/cls` | Clear the screen |
 | `/help` | List these commands |
@@ -79,6 +80,15 @@ your key stopped working or you want to switch accounts.
 `default` and `dark` suit a dark terminal, `light` suits a white background, and `mono` drops
 colour entirely — useful for screenshots, high-contrast setups, or if colour is hard to
 distinguish. Your choice is remembered. `/theme` on its own shows the current one.
+
+### `/name`
+
+By default OpenKey labels your messages with your Windows account name, so it never asks. If that
+is not what you want to be called, `/name Sam` changes it, and `/name reset` puts it back. `/name`
+on its own shows the current one.
+
+It only changes the label on screen. Your name is never sent to a model, and exports say `You` —
+so a transcript you share does not carry a name you did not choose to put in it.
 
 ### `/models`
 

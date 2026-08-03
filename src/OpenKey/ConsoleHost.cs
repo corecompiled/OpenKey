@@ -4,6 +4,7 @@ using OpenKey.Core.AppPaths;
 using OpenKey.Core.Engine;
 using OpenKey.Core.Providers;
 using OpenKey.Core.Storage;
+using OpenKey.Core.Text;
 using OpenKey.Core.Updates;
 using OpenKey.Windows;
 using OpenKey.Windows.OAuth;
@@ -16,9 +17,10 @@ namespace OpenKey;
 public sealed class ConsoleHost
 {
     // Computed, not a field initializer: those run at DI construction, before ConsoleLayout.Initialize
-    // resolves the glyph tier, so a cached value would always be the ASCII fallback.
-    private static string UserPrompt =>
-        $"[{Theme.Strong}]{Markup.Escape(Environment.UserName)}[/] [{Theme.Brand}]{Glyphs.Caret}[/] ";
+    // resolves the glyph tier, so a cached value would always be the ASCII fallback. It also has to
+    // re-read the name, which /name can change mid-session.
+    private string UserPrompt =>
+        $"[{Theme.Strong}]{Markup.Escape(_config.Current.DisplayName)}[/] [{Theme.Brand}]{Glyphs.Caret}[/] ";
 
     private readonly IAppPaths _paths;
     private readonly IKeyStore _keyStore;
@@ -120,7 +122,11 @@ public sealed class ConsoleHost
 
             if (line is null) break;                       // EOF / Ctrl+D
             if (_exiting) break;
-            if (string.IsNullOrWhiteSpace(line)) continue;
+
+            // Once, at the boundary, so the command router and the message that reaches the model
+            // see the same clean text.
+            line = UserInput.Normalize(line);
+            if (line.Length == 0) continue;
 
             var result = await _commands.HandleAsync(line, CancellationToken.None);
             if (result == CommandResult.Exit) break;
@@ -341,7 +347,7 @@ public sealed class ConsoleHost
 
         foreach (var t in nonSystem.TakeLast(2))
         {
-            var label = t.Role == ChatMessage.UserRole ? Environment.UserName : "OpenKey AI";
+            var label = t.Role == ChatMessage.UserRole ? _config.Current.DisplayName : "OpenKey AI";
             var flat = t.Content.ReplaceLineEndings(" ").Trim();
             var preview = flat.Length > 70 ? flat[..70] + Glyphs.Ellipsis : flat;
             AnsiConsole.MarkupLine(
@@ -636,7 +642,7 @@ public sealed class ConsoleHost
     /// is redirected, which Spectre prompts now do; and a multi-line paste leaves its remaining
     /// lines in the driver buffer where they can be drained instead of being executed as commands.
     /// </summary>
-    private static string? ReadUserLine()
+    private string? ReadUserLine()
     {
         AnsiConsole.WriteLine();
         AnsiConsole.Markup(UserPrompt);

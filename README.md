@@ -63,6 +63,7 @@ Full walkthrough: [`docs/08-user-guide.md`](docs/08-user-guide.md).
 | `/models` | Choose which AI model answers you |
 | `/model` | Show which model is answering right now |
 | `/theme` | Switch colours: default, dark, light, mono |
+| `/name` | Change what OpenKey calls you |
 | `/about` | Version, where your data lives, who made it |
 | `/cls` | Clear the screen |
 | `/help` | List all commands |

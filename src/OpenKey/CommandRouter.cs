@@ -5,6 +5,7 @@ using OpenKey.Core.AppPaths;
 using OpenKey.Core.Engine;
 using OpenKey.Core.Providers;
 using OpenKey.Core.Storage;
+using OpenKey.Core.Text;
 using OpenKey.Ui;
 using Spectre.Console;
 
@@ -42,11 +43,16 @@ public sealed class CommandRouter
 
     public async Task<CommandResult> HandleAsync(string input, CancellationToken ct)
     {
+        // Normalize before the test, not after. This ran on the raw string, so a leading space or
+        // an invisible character left by a paste meant "/help" was not recognised as a command and
+        // went to the model as a message instead.
+        input = UserInput.Normalize(input);
+
         if (!input.StartsWith('/')) return CommandResult.NotACommand;
 
         PendingResend = null;
 
-        var parts = input.Trim().Split(' ', 2);
+        var parts = input.Split(' ', 2);
         var cmd = parts[0].ToLowerInvariant();
         var arg = parts.Length > 1 ? parts[1].Trim() : null;
 
@@ -97,6 +103,10 @@ public sealed class CommandRouter
 
             case "/theme":
                 SetTheme(arg);
+                return CommandResult.Handled;
+
+            case "/name":
+                SetUserName(arg);
                 return CommandResult.Handled;
 
             case "/model":
@@ -315,7 +325,7 @@ public sealed class CommandRouter
 
         foreach (var t in turns)
         {
-            var who = t.Role == ChatMessage.UserRole ? Environment.UserName : "OpenKey AI";
+            var who = t.Role == ChatMessage.UserRole ? _config.Current.DisplayName : "OpenKey AI";
             var style = t.Role == ChatMessage.UserRole ? Theme.Strong : Theme.Brand;
             table.AddRow(
                 $"[{style}]{Markup.Escape(who)}[/]",
@@ -415,6 +425,42 @@ public sealed class CommandRouter
         {
             Components.HintLine("Couldn't reach the Windows clipboard.");
         }
+    }
+
+    /// <summary>
+    /// Sets the label shown on your own messages. Blank shows the current value; "reset" goes back
+    /// to the Windows account name.
+    /// <para>
+    /// There is no prompt for this at first run. The first run already asks for a key, and a second
+    /// question before anything useful has happened is a tax — especially when the account name is
+    /// right almost every time. Editable and discoverable beats asked-up-front.
+    /// </para>
+    /// </summary>
+    private void SetUserName(string? name)
+    {
+        var current = _config.Current;
+
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            AnsiConsole.MarkupLine(
+                $"OpenKey calls you [{Theme.Brand}]{Markup.Escape(current.DisplayName)}[/]"
+                + (current.UserName is null ? $" [{Theme.Muted}](your Windows account name)[/]" : string.Empty));
+            Components.HintLine("Change it with /name Sam, or /name reset to go back to your Windows account name.");
+            return;
+        }
+
+        var wanted = name.Trim();
+
+        if (string.Equals(wanted, "reset", StringComparison.OrdinalIgnoreCase))
+        {
+            _config.Save(current.WithUserName(null));
+            Components.SuccessLine($"Back to {_config.Current.DisplayName}.");
+            return;
+        }
+
+        // Trimming and the length cap belong to WithUserName, so every entry point agrees.
+        _config.Save(current.WithUserName(wanted));
+        Components.SuccessLine($"OpenKey will call you {_config.Current.DisplayName}.");
     }
 
     private void SetTheme(string? name)
@@ -565,6 +611,7 @@ public sealed class CommandRouter
         table.AddEmptyRow();
         table.AddRow($"[{Theme.Muted}]OpenKey[/]", string.Empty);
         Row("/theme", "Switch colours: default, dark, light, mono");
+        Row("/name", "Change what OpenKey calls you");
         Row("/about", "Show version, where your data lives, and who made this");
         Row("/cls", "Clear the screen");
         Row("/help", "Show this list");
