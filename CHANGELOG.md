@@ -5,6 +5,8 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-08-03
+
 ### Added
 
 - **A windowed app.** `OpenKeyApp.exe` ships alongside the console from the same release: the same
@@ -13,6 +15,19 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   buttons for new chat, retry, copy, export, model choice, theme and about.
 - Four colour themes in both surfaces — default, dark, light and mono — remembered between runs and
   shared between the console and the app.
+- Keyboard shortcuts in the app: Enter sends, Shift+Enter adds a line, Esc stops a reply, Ctrl+L
+  clears the chat.
+- **Clear can be undone.** Clearing a chat offers an Undo for as long as you haven't sent anything
+  new, so a misclick doesn't cost you the conversation.
+
+### Changed
+
+- The app's "New chat" button is now "Clear". It never started a new conversation alongside the old
+  one — it ended the only one there is — and the old label implied otherwise.
+- Theme, About and Erase everything moved into a settings menu, leaving the toolbar for things that
+  act on the conversation. Erase now sits alone at the bottom of that menu, away from Export.
+- The model picker has an **Automatic** option again, so you can hand the choice back to OpenKey
+  after picking a specific model.
 
 ## [0.2.1] — 2026-08-03
 
@@ -138,7 +153,8 @@ much smaller, faster binary.
 - Commands: `/about`, `/models`, `/model`, `/cls`, `/help`, `/reset`, `/quit`.
 - Single self-contained `.exe` that runs from a USB stick with nothing installed.
 
-[Unreleased]: https://github.com/corecompiled/OpenKey/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/corecompiled/OpenKey/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/corecompiled/OpenKey/releases/tag/v0.3.0
 [0.2.1]: https://github.com/corecompiled/OpenKey/releases/tag/v0.2.1
 [0.2.0]: https://github.com/corecompiled/OpenKey/releases/tag/v0.2.0
 [0.1.0]: https://github.com/corecompiled/OpenKey/releases/tag/v0.1.0
