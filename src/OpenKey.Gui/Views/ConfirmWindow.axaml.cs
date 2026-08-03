@@ -8,12 +8,20 @@ public partial class ConfirmWindow : Window
 {
     public ConfirmWindow() => InitializeComponent();
 
-    public ConfirmWindow(string title, string body, string confirmLabel) : this()
+    /// <param name="destructive">
+    /// Styles the confirm button as destructive. Off by default, because this window is also used
+    /// for plain acknowledgement — About reused it and inherited a dark-red "Close" button, which
+    /// on the light theme was a maroon block on near-white.
+    /// </param>
+    public ConfirmWindow(string title, string body, string confirmLabel, bool destructive = false) : this()
     {
         Title = title;
         this.FindControl<TextBlock>("TitleText")!.Text = title;
         this.FindControl<TextBlock>("BodyText")!.Text = body;
-        this.FindControl<Button>("ConfirmButton")!.Content = confirmLabel;
+
+        var confirm = this.FindControl<Button>("ConfirmButton")!;
+        confirm.Content = confirmLabel;
+        confirm.Classes.Add(destructive ? "destructive" : "primary");
 
         Opened += (_, _) => this.FindControl<Button>("CancelButton")?.Focus();
     }

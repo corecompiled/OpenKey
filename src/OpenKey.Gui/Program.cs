@@ -30,7 +30,6 @@ internal static class Program
         services.AddSingleton<IChatStore, JsonChatStore>();
         services.AddSingleton<IConfigStore, JsonConfigStore>();
         services.AddSingleton<IUpdateChecker, GitHubUpdateChecker>();
-services.AddSingleton<IUpdateChecker, GitHubUpdateChecker>();
         services.AddSingleton<IRotationPolicy, RotationPolicy>();
         services.AddSingleton<ITokenCounter, TiktokenCounter>();
 

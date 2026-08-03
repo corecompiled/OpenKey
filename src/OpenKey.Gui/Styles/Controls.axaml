@@ -1,0 +1,729 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+  <!--
+    Control interaction states. Avalonia 12.1.1 / FluentTheme.
+
+    Two rules govern this file, both learned from bugs that were in the shipped GUI:
+
+    1. EVERY COLOUR STATE IS SET ON THE TEMPLATE PART, NEVER ON THE CONTROL. Fluent's
+       ControlTheme sets the part directly, so a control-level Background loses to it the
+       moment the pointer arrives. That is why the Send button used to drop its brand colour
+       and turn Fluent grey on hover, and why the "Erase everything…" menu item lost its red
+       exactly when you pointed at it.
+
+    2. NOTHING THAT AFFECTS LAYOUT ANIMATES. The focus ring reserves its 2px at rest with a
+       transparent brush rather than growing the border, and TextBox BorderThickness is pinned
+       to 1 in every state — Fluent's own theme raises it to 2 on :focus, which shifts the
+       caret and the text by a pixel the instant you click in.
+
+    Part names below were read off live controls under 12.1.1 and several differ from
+    Avalonia 11. Two are easy to get wrong: ComboBoxItem's presenter is UNNAMED (a
+    #PART_ContentPresenter selector silently matches nothing), and MenuItem hover is
+    :selected, not :pointerover.
+
+    Easings are in element form rather than Easing="CubicEaseOut" because the attribute form
+    resolves through Type.GetType(string); this project publishes with PublishAot, so the
+    element form keeps the easing types statically rooted.
+  -->
+
+  <!-- ===================================================================
+       BUTTONS — shared chassis
+       Part: ContentPresenter#PART_ContentPresenter
+       =================================================================== -->
+
+  <Style Selector="Button.primary, Button.ghost, Button.danger, Button.icon">
+    <Setter Property="CornerRadius" Value="6" />
+    <Setter Property="BorderThickness" Value="2" />
+    <Setter Property="MinHeight" Value="34" />
+    <Setter Property="HorizontalContentAlignment" Value="Center" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+    <Setter Property="RenderTransformOrigin" Value="50%,50%" />
+    <Setter Property="RenderTransform" Value="scale(1)" />
+    <Setter Property="Transitions">
+      <Transitions>
+        <!-- 75ms linear matches Fluent's own button press. Below ~100ms an easing curve is
+             imperceptible, so linear is honest and cheap; a press should feel mechanical. -->
+        <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.075">
+          <TransformOperationsTransition.Easing>
+            <LinearEasing />
+          </TransformOperationsTransition.Easing>
+        </TransformOperationsTransition>
+        <DoubleTransition Property="Opacity" Duration="0:0:0.12">
+          <DoubleTransition.Easing>
+            <CubicEaseOut />
+          </DoubleTransition.Easing>
+        </DoubleTransition>
+      </Transitions>
+    </Setter>
+  </Style>
+
+  <!-- Colour transitions live on the presenter, because the colours do. 120ms is the top of
+       "instant": under ~80ms a colour change reads as a jump, over ~180ms the pointer has
+       already moved on. The border is faster at 90ms — focus is a state you navigate through
+       with Tab, and a ring that lags the keyboard feels broken. -->
+  <Style Selector="Button.primary /template/ ContentPresenter#PART_ContentPresenter,
+                   Button.ghost   /template/ ContentPresenter#PART_ContentPresenter,
+                   Button.danger  /template/ ContentPresenter#PART_ContentPresenter,
+                   Button.icon    /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Transitions">
+      <Transitions>
+        <BrushTransition Property="Background" Duration="0:0:0.12">
+          <BrushTransition.Easing><CubicEaseOut /></BrushTransition.Easing>
+        </BrushTransition>
+        <BrushTransition Property="BorderBrush" Duration="0:0:0.09">
+          <BrushTransition.Easing><CubicEaseOut /></BrushTransition.Easing>
+        </BrushTransition>
+        <BrushTransition Property="Foreground" Duration="0:0:0.12">
+          <BrushTransition.Easing><CubicEaseOut /></BrushTransition.Easing>
+        </BrushTransition>
+      </Transitions>
+    </Setter>
+  </Style>
+
+  <!-- Scale on the control, colour on the presenter. 0.97 rather than Fluent's 0.98: these
+       buttons are small, so the cue needs to be slightly stronger to register at this size. -->
+  <Style Selector="Button.primary:pressed, Button.ghost:pressed,
+                   Button.danger:pressed,  Button.icon:pressed">
+    <Setter Property="RenderTransform" Value="scale(0.97)" />
+  </Style>
+
+  <Style Selector="Button.primary:disabled, Button.ghost:disabled,
+                   Button.danger:disabled,  Button.icon:disabled">
+    <Setter Property="Opacity" Value="0.45" />
+  </Style>
+
+  <!-- ============================ PRIMARY ============================ -->
+
+  <Style Selector="Button.primary">
+    <Setter Property="Padding" Value="18,8" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+  </Style>
+
+  <Style Selector="Button.primary /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Brand}" />
+    <Setter Property="Foreground" Value="{DynamicResource OnBrand}" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+  </Style>
+
+  <Style Selector="Button.primary:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource BrandHover}" />
+    <Setter Property="Foreground" Value="{DynamicResource OnBrand}" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+  </Style>
+
+  <!-- OnBrand, not Focus: the ring sits on the brand fill, and Focus is chosen to contrast
+       with the page surface. A blue ring on a blue button is not a ring. -->
+  <Style Selector="Button.primary:focus-visible /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="BorderBrush" Value="{DynamicResource OnBrand}" />
+  </Style>
+
+  <Style Selector="Button.primary:pressed /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource BrandPressed}" />
+    <Setter Property="Foreground" Value="{DynamicResource OnBrand}" />
+  </Style>
+
+  <Style Selector="Button.primary:disabled /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource BrandDisabled}" />
+    <Setter Property="Foreground" Value="{DynamicResource Muted}" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+  </Style>
+
+  <!-- ======================== GHOST / SECONDARY ======================== -->
+
+  <Style Selector="Button.ghost">
+    <Setter Property="Padding" Value="12,7" />
+    <Setter Property="FontWeight" Value="Normal" />
+  </Style>
+
+  <Style Selector="Button.ghost /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Foreground" Value="{DynamicResource Muted}" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+  </Style>
+
+  <Style Selector="Button.ghost:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Hover}" />
+    <Setter Property="Foreground" Value="{DynamicResource Body}" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+  </Style>
+
+  <Style Selector="Button.ghost:focus-visible /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="BorderBrush" Value="{DynamicResource Focus}" />
+    <Setter Property="Foreground" Value="{DynamicResource Body}" />
+  </Style>
+
+  <Style Selector="Button.ghost:pressed /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Pressed}" />
+    <Setter Property="Foreground" Value="{DynamicResource Body}" />
+  </Style>
+
+  <Style Selector="Button.ghost:disabled /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Foreground" Value="{DynamicResource Muted}" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+  </Style>
+
+  <!-- Full-width row at the head of the chat list. Declared after Button.ghost on purpose:
+       Avalonia resolves competing setters by document order, not specificity, so an earlier
+       .ghost Padding would otherwise win over .ghost.sidebar. The 6 + 10 = 16px left inset puts
+       its label on the same edge as the "Chats" caption and the chat rows below it. -->
+  <Style Selector="Button.ghost.sidebar">
+    <Setter Property="HorizontalAlignment" Value="Stretch" />
+    <Setter Property="HorizontalContentAlignment" Value="Left" />
+    <Setter Property="Padding" Value="10,8" />
+    <Setter Property="Margin" Value="6,10,6,0" />
+    <Setter Property="FontSize" Value="13" />
+  </Style>
+
+  <!-- ========================== DESTRUCTIVE ==========================
+       Tinted surface at rest, solid only on press. This sits next to neutral verbs, and a
+       permanently-red button trains people to stop seeing it. -->
+
+  <Style Selector="Button.danger">
+    <Setter Property="Padding" Value="16,8" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+  </Style>
+
+  <Style Selector="Button.danger /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource DangerSurface}" />
+    <Setter Property="Foreground" Value="{DynamicResource Danger}" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+  </Style>
+
+  <Style Selector="Button.danger:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource DangerHover}" />
+    <Setter Property="Foreground" Value="{DynamicResource OnDanger}" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+  </Style>
+
+  <Style Selector="Button.danger:focus-visible /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="BorderBrush" Value="{DynamicResource Danger}" />
+  </Style>
+
+  <Style Selector="Button.danger:pressed /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource DangerPressed}" />
+    <Setter Property="Foreground" Value="{DynamicResource OnDanger}" />
+  </Style>
+
+  <Style Selector="Button.danger:disabled /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource DangerSurface}" />
+    <Setter Property="Foreground" Value="{DynamicResource Muted}" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+  </Style>
+
+  <!-- ====================== ICON-ONLY ======================
+       Fixed 34×34 square, Padding 0 so the glyph optically centres instead of being pushed
+       around by asymmetric text metrics. The two icon buttons in the header used to carry
+       different padding and different font sizes while sitting in the same row. -->
+
+  <Style Selector="Button.icon">
+    <Setter Property="Width" Value="34" />
+    <Setter Property="Height" Value="34" />
+    <Setter Property="MinWidth" Value="34" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="FontSize" Value="15" />
+    <Setter Property="CornerRadius" Value="8" />
+  </Style>
+
+  <Style Selector="Button.icon /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Foreground" Value="{DynamicResource Muted}" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+  </Style>
+
+  <Style Selector="Button.icon:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Hover}" />
+    <Setter Property="Foreground" Value="{DynamicResource Body}" />
+  </Style>
+
+  <Style Selector="Button.icon:focus-visible /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="BorderBrush" Value="{DynamicResource Focus}" />
+    <Setter Property="Foreground" Value="{DynamicResource Body}" />
+  </Style>
+
+  <Style Selector="Button.icon:pressed /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Pressed}" />
+    <Setter Property="Foreground" Value="{DynamicResource Body}" />
+  </Style>
+
+  <!-- The menu is open: hold the button lit, so it is obvious what the flyout belongs to. -->
+  <Style Selector="Button.icon:flyout-open /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Pressed}" />
+    <Setter Property="Foreground" Value="{DynamicResource Body}" />
+  </Style>
+
+  <!-- ===================================================================
+       CHAT SIDEBAR LIST
+       =================================================================== -->
+
+  <Style Selector="ListBox.chats">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Padding" Value="6,0,6,10" />
+  </Style>
+
+  <Style Selector="ListBox.chats ListBoxItem">
+    <Setter Property="Padding" Value="10,8" />
+    <Setter Property="Margin" Value="0,1" />
+    <Setter Property="MinHeight" Value="0" />
+    <Setter Property="CornerRadius" Value="6" />
+  </Style>
+
+  <Style Selector="ListBox.chats ListBoxItem /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="CornerRadius" Value="6" />
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Foreground" Value="{DynamicResource Body}" />
+    <Setter Property="Transitions">
+      <Transitions>
+        <!-- Shorter than a button: you sweep across many rows, and 120ms each would smear
+             into a trail behind the pointer. -->
+        <BrushTransition Property="Background" Duration="0:0:0.10">
+          <BrushTransition.Easing><CubicEaseOut /></BrushTransition.Easing>
+        </BrushTransition>
+      </Transitions>
+    </Setter>
+  </Style>
+
+  <Style Selector="ListBox.chats ListBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Hover}" />
+    <Setter Property="Foreground" Value="{DynamicResource Body}" />
+  </Style>
+
+  <Style Selector="ListBox.chats ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Selection}" />
+    <Setter Property="Foreground" Value="{DynamicResource Body}" />
+  </Style>
+
+  <!-- Selected while the list does not have focus: desaturate, so only one thing on screen
+       looks live at a time. -->
+  <Style Selector="ListBox.chats ListBoxItem:selected:not(:focus) /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource SelectionUnfocused}" />
+    <Setter Property="Foreground" Value="{DynamicResource Body}" />
+  </Style>
+
+  <Style Selector="ListBox.chats ListBoxItem:selected:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Selection}" />
+    <Setter Property="Foreground" Value="{DynamicResource Body}" />
+  </Style>
+
+  <Style Selector="ListBox.chats ListBoxItem:focus-visible /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="BorderThickness" Value="2" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Focus}" />
+  </Style>
+
+  <!-- ===================================================================
+       TEXTBOX — composer and rename field
+       Part: Border#PART_BorderElement
+
+       :focus, not :focus-visible. A text field must show focus on click, because a live
+       caret is exactly what focus means here.
+       =================================================================== -->
+
+  <Style Selector="TextBox">
+    <Setter Property="CornerRadius" Value="6" />
+    <Setter Property="MinHeight" Value="36" />
+    <Setter Property="Padding" Value="10,8" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="Foreground" Value="{DynamicResource Body}" />
+    <Setter Property="CaretBrush" Value="{DynamicResource Brand}" />
+    <Setter Property="SelectionBrush" Value="{DynamicResource Selection}" />
+  </Style>
+
+  <Style Selector="TextBox /template/ Border#PART_BorderElement">
+    <Setter Property="Background" Value="{DynamicResource SurfaceSunken}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource LineStrong}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="6" />
+    <Setter Property="Transitions">
+      <Transitions>
+        <BrushTransition Property="Background" Duration="0:0:0.12">
+          <BrushTransition.Easing><CubicEaseOut /></BrushTransition.Easing>
+        </BrushTransition>
+        <BrushTransition Property="BorderBrush" Duration="0:0:0.12">
+          <BrushTransition.Easing><CubicEaseOut /></BrushTransition.Easing>
+        </BrushTransition>
+      </Transitions>
+    </Setter>
+  </Style>
+
+  <Style Selector="TextBox:pointerover /template/ Border#PART_BorderElement">
+    <Setter Property="Background" Value="{DynamicResource SurfaceSunken}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource LineControl}" />
+    <Setter Property="BorderThickness" Value="1" />
+  </Style>
+
+  <Style Selector="TextBox:focus /template/ Border#PART_BorderElement">
+    <Setter Property="Background" Value="{DynamicResource SurfaceSunken}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Brand}" />
+    <Setter Property="BorderThickness" Value="1" />
+  </Style>
+
+  <Style Selector="TextBox:disabled /template/ Border#PART_BorderElement">
+    <Setter Property="Background" Value="{DynamicResource Surface}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Line}" />
+    <Setter Property="BorderThickness" Value="1" />
+  </Style>
+
+  <!-- ===================================================================
+       COMBOBOX
+       Parts: Border#Background, Border#HighlightBackground, PathIcon#DropDownGlyph.
+       Fluent already drives #HighlightBackground from :focus-visible, so the keyboard ring
+       is wired for free and only needs recolouring.
+       =================================================================== -->
+
+  <Style Selector="ComboBox">
+    <Setter Property="CornerRadius" Value="6" />
+    <Setter Property="MinHeight" Value="34" />
+    <Setter Property="Padding" Value="10,0,8,0" />
+    <Setter Property="Foreground" Value="{DynamicResource Body}" />
+  </Style>
+
+  <Style Selector="ComboBox /template/ Border#Background">
+    <Setter Property="Background" Value="{DynamicResource SurfaceSunken}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource LineStrong}" />
+    <Setter Property="Transitions">
+      <Transitions>
+        <BrushTransition Property="Background" Duration="0:0:0.12">
+          <BrushTransition.Easing><CubicEaseOut /></BrushTransition.Easing>
+        </BrushTransition>
+        <BrushTransition Property="BorderBrush" Duration="0:0:0.12">
+          <BrushTransition.Easing><CubicEaseOut /></BrushTransition.Easing>
+        </BrushTransition>
+      </Transitions>
+    </Setter>
+  </Style>
+
+  <Style Selector="ComboBox:pointerover /template/ Border#Background">
+    <Setter Property="Background" Value="{DynamicResource Hover}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource LineControl}" />
+  </Style>
+
+  <Style Selector="ComboBox:pressed /template/ Border#Background">
+    <Setter Property="Background" Value="{DynamicResource Pressed}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource LineControl}" />
+  </Style>
+
+  <Style Selector="ComboBox:dropdownopen /template/ Border#Background">
+    <Setter Property="Background" Value="{DynamicResource Pressed}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Brand}" />
+  </Style>
+
+  <Style Selector="ComboBox:focus-visible /template/ Border#HighlightBackground">
+    <Setter Property="IsVisible" Value="True" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Focus}" />
+  </Style>
+
+  <Style Selector="ComboBox /template/ PathIcon#DropDownGlyph">
+    <Setter Property="Foreground" Value="{DynamicResource Muted}" />
+  </Style>
+  <Style Selector="ComboBox:pointerover /template/ PathIcon#DropDownGlyph">
+    <Setter Property="Foreground" Value="{DynamicResource Body}" />
+  </Style>
+  <Style Selector="ComboBox:disabled /template/ Border#Background">
+    <Setter Property="Background" Value="{DynamicResource Surface}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Line}" />
+  </Style>
+
+  <!-- ComboBoxItem's presenter is UNNAMED under 12.1.1. Adding #PART_ContentPresenter here
+       matches nothing and fails silently. -->
+  <Style Selector="ComboBoxItem">
+    <Setter Property="Padding" Value="10,7" />
+    <Setter Property="MinHeight" Value="32" />
+    <Setter Property="CornerRadius" Value="4" />
+    <Setter Property="Margin" Value="3,1" />
+  </Style>
+
+  <Style Selector="ComboBoxItem /template/ ContentPresenter">
+    <Setter Property="CornerRadius" Value="4" />
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Foreground" Value="{DynamicResource Body}" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+    <Setter Property="Transitions">
+      <Transitions>
+        <BrushTransition Property="Background" Duration="0:0:0.09">
+          <BrushTransition.Easing><CubicEaseOut /></BrushTransition.Easing>
+        </BrushTransition>
+      </Transitions>
+    </Setter>
+  </Style>
+
+  <Style Selector="ComboBoxItem:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Hover}" />
+    <Setter Property="Foreground" Value="{DynamicResource Body}" />
+  </Style>
+  <Style Selector="ComboBoxItem:selected /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Selection}" />
+    <Setter Property="Foreground" Value="{DynamicResource Body}" />
+  </Style>
+  <Style Selector="ComboBoxItem:selected:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Selection}" />
+    <Setter Property="Foreground" Value="{DynamicResource Body}" />
+  </Style>
+  <Style Selector="ComboBoxItem:pressed /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Pressed}" />
+    <Setter Property="Foreground" Value="{DynamicResource Body}" />
+  </Style>
+
+  <!-- ===================================================================
+       MENUS
+       MenuItem hover is :selected, not :pointerover.
+       =================================================================== -->
+
+  <Style Selector="MenuFlyoutPresenter">
+    <Setter Property="Background" Value="{DynamicResource SurfaceOverlay}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource LineStrong}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="8" />
+    <Setter Property="Padding" Value="4" />
+  </Style>
+
+  <Style Selector="ContextMenu">
+    <Setter Property="Background" Value="{DynamicResource SurfaceOverlay}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource LineStrong}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="8" />
+    <Setter Property="Padding" Value="4" />
+  </Style>
+
+  <Style Selector="MenuItem">
+    <Setter Property="Padding" Value="10,7" />
+    <Setter Property="MinHeight" Value="32" />
+    <Setter Property="Foreground" Value="{DynamicResource Body}" />
+  </Style>
+
+  <Style Selector="MenuItem /template/ Border#PART_LayoutRoot">
+    <Setter Property="CornerRadius" Value="4" />
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Transitions">
+      <Transitions>
+        <BrushTransition Property="Background" Duration="0:0:0.09">
+          <BrushTransition.Easing><CubicEaseOut /></BrushTransition.Easing>
+        </BrushTransition>
+      </Transitions>
+    </Setter>
+  </Style>
+
+  <Style Selector="MenuItem:selected /template/ Border#PART_LayoutRoot">
+    <Setter Property="Background" Value="{DynamicResource Hover}" />
+  </Style>
+  <Style Selector="MenuItem:selected /template/ ContentPresenter#PART_HeaderPresenter">
+    <Setter Property="Foreground" Value="{DynamicResource Body}" />
+  </Style>
+  <Style Selector="MenuItem /template/ TextBlock#PART_InputGestureText">
+    <Setter Property="Foreground" Value="{DynamicResource Muted}" />
+  </Style>
+  <Style Selector="MenuItem /template/ Path#PART_ChevronPath">
+    <Setter Property="Fill" Value="{DynamicResource Muted}" />
+  </Style>
+  <Style Selector="MenuItem:selected /template/ Path#PART_ChevronPath">
+    <Setter Property="Fill" Value="{DynamicResource Body}" />
+  </Style>
+  <Style Selector="MenuItem:disabled /template/ ContentPresenter#PART_HeaderPresenter">
+    <Setter Property="Foreground" Value="{DynamicResource Muted}" />
+  </Style>
+
+  <!-- Destructive menu item. The Foreground override must target the header presenter:
+       setting Foreground on the MenuItem itself is beaten by Fluent's :selected rule, which
+       is why "Erase everything…" used to lose its red exactly on hover. -->
+  <Style Selector="MenuItem.destructive /template/ ContentPresenter#PART_HeaderPresenter">
+    <Setter Property="Foreground" Value="{DynamicResource Danger}" />
+  </Style>
+  <Style Selector="MenuItem.destructive:selected /template/ Border#PART_LayoutRoot">
+    <Setter Property="Background" Value="{DynamicResource DangerSurface}" />
+  </Style>
+  <Style Selector="MenuItem.destructive:selected /template/ ContentPresenter#PART_HeaderPresenter">
+    <Setter Property="Foreground" Value="{DynamicResource Danger}" />
+  </Style>
+
+  <Style Selector="Separator">
+    <Setter Property="Background" Value="{DynamicResource Line}" />
+    <Setter Property="Height" Value="1" />
+    <Setter Property="Margin" Value="6,4" />
+  </Style>
+
+  <!-- ===================================================================
+       SIDEBAR SPLITTER
+       Fluent leaves Cursor unset and forces MinWidth 6, so both are overridden. The template
+       is an 8px transparent hit area wrapping the 1px hairline that already divided the panes
+       — so the splitter costs nothing visually and there is no layout shift while dragging,
+       only a colour swap. An invisible splitter would be undiscoverable.
+       =================================================================== -->
+
+  <Style Selector="GridSplitter.pane">
+    <Setter Property="Width" Value="8" />
+    <Setter Property="MinWidth" Value="8" />
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Cursor" Value="SizeWestEast" />
+    <Setter Property="ResizeDirection" Value="Columns" />
+    <Setter Property="ResizeBehavior" Value="PreviousAndNext" />
+    <Setter Property="ShowsPreview" Value="False" />
+    <Setter Property="Focusable" Value="False" />
+    <Setter Property="Template">
+      <ControlTemplate TargetType="GridSplitter">
+        <Border Background="Transparent">
+          <Border Name="Hairline"
+                  Width="1"
+                  HorizontalAlignment="Center"
+                  VerticalAlignment="Stretch"
+                  Background="{DynamicResource Line}">
+            <Border.Transitions>
+              <Transitions>
+                <BrushTransition Property="Background" Duration="0:0:0.12">
+                  <BrushTransition.Easing><CubicEaseOut /></BrushTransition.Easing>
+                </BrushTransition>
+              </Transitions>
+            </Border.Transitions>
+          </Border>
+        </Border>
+      </ControlTemplate>
+    </Setter>
+  </Style>
+
+  <Style Selector="GridSplitter.pane:pointerover /template/ Border#Hairline">
+    <Setter Property="Background" Value="{DynamicResource Brand}" />
+  </Style>
+  <Style Selector="GridSplitter.pane:pressed /template/ Border#Hairline">
+    <Setter Property="Background" Value="{DynamicResource Brand}" />
+  </Style>
+
+  <!-- ===================================================================
+       SCROLLBARS — chrome, so it recedes.
+       =================================================================== -->
+
+  <Style Selector="ScrollBar:vertical /template/ Border#Root">
+    <Setter Property="Background" Value="Transparent" />
+  </Style>
+
+  <!-- ===================================================================
+       TRANSCRIPT TURNS
+
+       The two speakers differ by plane, not by indentation or a coloured name: your message
+       sits on a raised card, the reply sits directly on the page. Scanning a long transcript
+       for "where did I ask that" then costs a glance instead of a read.
+
+       These are styles rather than view-model brushes on purpose — DynamicResource in a setter
+       repaints on a theme switch, whereas a brush resolved in the view model would freeze at
+       the value the theme happened to have when the message was constructed.
+       =================================================================== -->
+
+  <Style Selector="Border.turn">
+    <Setter Property="Padding" Value="2,0" />
+    <Setter Property="Margin" Value="0,6" />
+    <Setter Property="CornerRadius" Value="10" />
+    <Setter Property="Background" Value="Transparent" />
+  </Style>
+
+  <!-- Your own message hugs its text and sits on the right; the reply stays full width on the
+       left. Stretching to the column meant a bubble was as wide as the widest thing in the
+       conversation — one code fence in one reply and every short message you had ever sent
+       inflated with it. Capped at 560 of the 720 column so a long message still wraps as a
+       bubble rather than becoming the column. -->
+  <Style Selector="Border.turn.user">
+    <Setter Property="Padding" Value="14,12" />
+    <Setter Property="Background" Value="{DynamicResource SurfaceRaised}" />
+    <Setter Property="HorizontalAlignment" Value="Right" />
+    <Setter Property="MaxWidth" Value="560" />
+  </Style>
+
+  <!-- Both speakers used to be Brand, which made the accent mean "a name is here" rather than
+       "this one is the assistant". The reply keeps the accent; your own name recedes, because
+       you already know which messages are yours. -->
+  <Style Selector="Border.turn TextBlock.speaker">
+    <Setter Property="Foreground" Value="{DynamicResource Brand}" />
+  </Style>
+  <Style Selector="Border.turn.user TextBlock.speaker">
+    <Setter Property="Foreground" Value="{DynamicResource Muted}" />
+  </Style>
+
+  <Style Selector="Button.turnaction">
+    <Setter Property="Padding" Value="10,5" />
+    <Setter Property="FontSize" Value="11" />
+    <Setter Property="MinWidth" Value="62" />
+  </Style>
+
+  <!-- Quiet while you read, present when you reach for it. No Transitions setter here on
+       purpose: the shared button chassis already fades Opacity over 120ms, and re-declaring
+       Transitions replaces that collection wholesale — taking the press-scale with it. -->
+  <Style Selector="Button.turnaction.copy">
+    <Setter Property="Opacity" Value="0" />
+  </Style>
+
+  <!-- Hover fires on the whole turn because Border.turn sets an explicit Transparent background;
+       a null background is not hit-testable, so this would otherwise only trigger over glyphs. -->
+  <Style Selector="Border.turn:pointerover Button.turnaction.copy">
+    <Setter Property="Opacity" Value="1" />
+  </Style>
+
+  <!-- Keyboard users never hover. Without this the button is reachable by Tab but invisible. -->
+  <Style Selector="Button.turnaction.copy:focus-visible">
+    <Setter Property="Opacity" Value="1" />
+  </Style>
+
+  <!-- ===================================================================
+       THINKING INDICATOR
+
+       Shown only before the first token, which on a busy free model is where the wait actually
+       is. Opacity and scale are both render-only, so an animation that runs for tens of seconds
+       costs no layout passes.
+       =================================================================== -->
+
+  <Style Selector="StackPanel.thinking > Ellipse">
+    <Setter Property="Width" Value="7" />
+    <Setter Property="Height" Value="7" />
+    <Setter Property="Fill" Value="{DynamicResource Brand}" />
+    <Setter Property="Opacity" Value="0.25" />
+  </Style>
+
+  <Style Selector="StackPanel.thinking > Ellipse.d1">
+    <Style.Animations>
+      <Animation Duration="0:0:1.4" IterationCount="INFINITE">
+        <KeyFrame Cue="0%"><Setter Property="Opacity" Value="0.25" /></KeyFrame>
+        <KeyFrame Cue="25%"><Setter Property="Opacity" Value="1" /></KeyFrame>
+        <KeyFrame Cue="55%"><Setter Property="Opacity" Value="0.25" /></KeyFrame>
+        <KeyFrame Cue="100%"><Setter Property="Opacity" Value="0.25" /></KeyFrame>
+      </Animation>
+    </Style.Animations>
+  </Style>
+
+  <!-- Same curve, offset. The stagger is what makes it read as a sequence rather than a flash. -->
+  <Style Selector="StackPanel.thinking > Ellipse.d2">
+    <Style.Animations>
+      <Animation Duration="0:0:1.4" Delay="0:0:0.18" IterationCount="INFINITE">
+        <KeyFrame Cue="0%"><Setter Property="Opacity" Value="0.25" /></KeyFrame>
+        <KeyFrame Cue="25%"><Setter Property="Opacity" Value="1" /></KeyFrame>
+        <KeyFrame Cue="55%"><Setter Property="Opacity" Value="0.25" /></KeyFrame>
+        <KeyFrame Cue="100%"><Setter Property="Opacity" Value="0.25" /></KeyFrame>
+      </Animation>
+    </Style.Animations>
+  </Style>
+
+  <Style Selector="StackPanel.thinking > Ellipse.d3">
+    <Style.Animations>
+      <Animation Duration="0:0:1.4" Delay="0:0:0.36" IterationCount="INFINITE">
+        <KeyFrame Cue="0%"><Setter Property="Opacity" Value="0.25" /></KeyFrame>
+        <KeyFrame Cue="25%"><Setter Property="Opacity" Value="1" /></KeyFrame>
+        <KeyFrame Cue="55%"><Setter Property="Opacity" Value="0.25" /></KeyFrame>
+        <KeyFrame Cue="100%"><Setter Property="Opacity" Value="0.25" /></KeyFrame>
+      </Animation>
+    </Style.Animations>
+  </Style>
+
+  <!-- ===================================================================
+       STREAMING CARET
+       A block that never moves reads as a rendering artifact rather than "still typing".
+       Opacity is layout-safe, so this costs nothing.
+       =================================================================== -->
+
+  <Style Selector="TextBlock.caret">
+    <Style.Animations>
+      <Animation Duration="0:0:1" IterationCount="INFINITE">
+        <KeyFrame Cue="0%"><Setter Property="Opacity" Value="1" /></KeyFrame>
+        <KeyFrame Cue="45%"><Setter Property="Opacity" Value="1" /></KeyFrame>
+        <KeyFrame Cue="55%"><Setter Property="Opacity" Value="0.15" /></KeyFrame>
+        <KeyFrame Cue="100%"><Setter Property="Opacity" Value="0.15" /></KeyFrame>
+      </Animation>
+    </Style.Animations>
+  </Style>
+
+</Styles>

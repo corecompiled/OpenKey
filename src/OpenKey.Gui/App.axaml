@@ -1,31 +1,65 @@
 <Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:sys="using:System"
              x:Class="OpenKey.Gui.App"
              RequestedThemeVariant="Dark">
 
   <Application.Styles>
     <FluentTheme />
+    <!-- Application-level, not Window.Styles. The button classes used to live on MainWindow, so
+         ConfirmWindow and RenameWindow could not see them and rendered as raw Fluent — the single
+         largest reason the app looked half-styled. -->
+    <StyleInclude Source="avares://OpenKeyApp/Styles/Controls.axaml" />
   </Application.Styles>
 
   <!-- Seed values only. GuiTheme.Apply overwrites every one of these at startup and on a theme
        switch, which is why the views bind with DynamicResource rather than StaticResource. -->
   <Application.Resources>
-    <SolidColorBrush x:Key="Surface" Color="#0F172A" />
-    <SolidColorBrush x:Key="SurfaceRaised" Color="#1E293B" />
-    <SolidColorBrush x:Key="CodeSurface" Color="#0B1220" />
-    <SolidColorBrush x:Key="Line" Color="#334155" />
-    <SolidColorBrush x:Key="Body" Color="#E2E8F0" />
-    <SolidColorBrush x:Key="Muted" Color="#94A3B8" />
-    <SolidColorBrush x:Key="Brand" Color="#22D3EE" />
-    <SolidColorBrush x:Key="Ok" Color="#4ADE80" />
-    <SolidColorBrush x:Key="Warn" Color="#FBBF24" />
-    <SolidColorBrush x:Key="Danger" Color="#F87171" />
-    <SolidColorBrush x:Key="OnBrand" Color="#04121A" />
+    <SolidColorBrush x:Key="SurfaceSunken" Color="#0E1014" />
+    <SolidColorBrush x:Key="Surface" Color="#161920" />
+    <SolidColorBrush x:Key="SurfaceRaised" Color="#1E222B" />
+    <SolidColorBrush x:Key="SurfaceOverlay" Color="#262B36" />
+    <SolidColorBrush x:Key="CodeSurface" Color="#0A0C10" />
+    <SolidColorBrush x:Key="Line" Color="#272C36" />
+    <SolidColorBrush x:Key="LineStrong" Color="#3A4150" />
+    <SolidColorBrush x:Key="LineControl" Color="#6A7283" />
+    <SolidColorBrush x:Key="Body" Color="#E6E9EF" />
+    <SolidColorBrush x:Key="Muted" Color="#A8B1C0" />
+    <SolidColorBrush x:Key="Brand" Color="#9FB1FF" />
+    <SolidColorBrush x:Key="BrandHover" Color="#B6C3FF" />
+    <SolidColorBrush x:Key="BrandPressed" Color="#8697EE" />
+    <SolidColorBrush x:Key="OnBrand" Color="#0E1120" />
+    <SolidColorBrush x:Key="Ok" Color="#5FD3A0" />
+    <SolidColorBrush x:Key="Warn" Color="#E7B45C" />
+    <SolidColorBrush x:Key="Danger" Color="#F2786E" />
+    <SolidColorBrush x:Key="DangerSurface" Color="#3A1F20" />
+    <SolidColorBrush x:Key="InfoSurface" Color="#1E2340" />
+    <SolidColorBrush x:Key="OkSurface" Color="#14302A" />
+    <SolidColorBrush x:Key="WarnSurface" Color="#332A1A" />
+    <SolidColorBrush x:Key="DangerHover" Color="#F2786E" />
+    <SolidColorBrush x:Key="DangerPressed" Color="#DC5F55" />
+    <SolidColorBrush x:Key="OnDanger" Color="#1A0C0B" />
+    <SolidColorBrush x:Key="BrandDisabled" Color="#2B3142" />
+    <SolidColorBrush x:Key="Hover" Color="#20252F" />
+    <SolidColorBrush x:Key="Pressed" Color="#2A3040" />
+    <SolidColorBrush x:Key="Selection" Color="#232A3D" />
+    <SolidColorBrush x:Key="SelectionUnfocused" Color="#232733" />
+    <SolidColorBrush x:Key="Focus" Color="#8FA2FF" />
 
-    <SolidColorBrush x:Key="CodeKeyword" Color="#C4B5FD" />
-    <SolidColorBrush x:Key="CodeString" Color="#86EFAC" />
-    <SolidColorBrush x:Key="CodeComment" Color="#64748B" />
-    <SolidColorBrush x:Key="CodeNumber" Color="#FCD34D" />
-    <SolidColorBrush x:Key="CodeType" Color="#7DD3FC" />
+    <SolidColorBrush x:Key="CodeText" Color="#D5DAE3" />
+    <SolidColorBrush x:Key="CodeKeyword" Color="#A9B7FF" />
+    <SolidColorBrush x:Key="CodeString" Color="#7FCCA5" />
+    <SolidColorBrush x:Key="CodeComment" Color="#7B8698" />
+    <SolidColorBrush x:Key="CodeNumber" Color="#E2B77C" />
+    <SolidColorBrush x:Key="CodeType" Color="#79C6DA" />
+
+    <BoxShadows x:Key="ShadowSoft">0 1 2 0 #40000000</BoxShadows>
+    <BoxShadows x:Key="ShadowOverlay">0 10 28 0 #73000000</BoxShadows>
+
+    <!-- The reading column. Around 90 characters at 15px is the top of the comfortable band;
+         uncapped, a maximised window puts roughly 220 characters on a line and the eye loses its
+         place on the return sweep. The column is left-aligned, not centred: it stays anchored to
+         the sidebar edge so the text does not shift sideways when the window is resized. -->
+    <sys:Double x:Key="ReadingWidth">720</sys:Double>
   </Application.Resources>
 </Application>

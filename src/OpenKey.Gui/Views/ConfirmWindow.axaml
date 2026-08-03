@@ -5,22 +5,22 @@
         CanResize="False"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
-        Background="{StaticResource Surface}"
+        Background="{DynamicResource SurfaceOverlay}"
         Title="OpenKey">
 
-  <Border Padding="22">
-    <StackPanel Spacing="14">
-      <TextBlock Name="TitleText" FontSize="17" FontWeight="Bold"
-                 Foreground="{StaticResource Body}" TextWrapping="Wrap" />
-      <TextBlock Name="BodyText" TextWrapping="Wrap"
-                 Foreground="{StaticResource Muted}" />
+  <Border Padding="24" BoxShadow="{DynamicResource ShadowOverlay}">
+    <StackPanel Spacing="16">
+      <TextBlock Name="TitleText" FontSize="17" FontWeight="SemiBold" LineHeight="24"
+                 Foreground="{DynamicResource Body}" TextWrapping="Wrap" />
+      <TextBlock Name="BodyText" TextWrapping="Wrap" FontSize="13" LineHeight="20"
+                 Foreground="{DynamicResource Muted}" />
 
       <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" Margin="0,8,0,0">
-        <!-- Cancel is the default and gets focus: a destructive action must never be one
-             stray Enter away. -->
-        <Button Name="CancelButton" Content="Cancel" Click="OnCancel" IsDefault="True" Padding="16,8" />
-        <Button Name="ConfirmButton" Click="OnConfirm" Padding="16,8"
-                Background="#7F1D1D" Foreground="#FEE2E2" FontWeight="SemiBold" />
+        <!-- Cancel is default AND cancel: Escape must close a destructive dialog, and a stray
+             Enter must never confirm one. -->
+        <Button Name="CancelButton" Classes="ghost" Content="Cancel" Click="OnCancel"
+                IsDefault="True" IsCancel="True" />
+        <Button Name="ConfirmButton" Click="OnConfirm" />
       </StackPanel>
     </StackPanel>
   </Border>
