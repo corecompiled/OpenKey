@@ -4,8 +4,10 @@
              x:Class="OpenKey.Gui.Views.CodeBlockView"
              x:DataType="vm:MarkdownBlock">
 
+  <!-- LineStrong, not Line: a fence is an object, and the hairline used for dividers is too
+       faint to give it an edge — in mono it left the snippet floating on the page. -->
   <Border Background="{DynamicResource CodeSurface}"
-          BorderBrush="{DynamicResource Line}"
+          BorderBrush="{DynamicResource LineStrong}"
           BorderThickness="1" CornerRadius="6">
     <Grid RowDefinitions="Auto,*">
 
@@ -14,10 +16,11 @@
         <TextBlock Grid.Column="0" Name="LanguageLabel"
                    FontSize="11" VerticalAlignment="Center"
                    Foreground="{DynamicResource Muted}" />
-        <Button Grid.Column="1" Name="CopyButton" Click="OnCopy"
-                Padding="8,3" FontSize="11" CornerRadius="4"
-                Background="Transparent"
-                Foreground="{DynamicResource Muted}"
+        <!-- MinWidth pins the width across the Copy/Copied swap, so the header does not jump at
+             the moment you press it. Height comes from the shared button chassis: this used to be
+             26px while the identical Copy on a reply was 34, so the two disagreed. -->
+        <Button Grid.Column="1" Name="CopyButton" Classes="ghost" Click="OnCopy"
+                Padding="10,5" FontSize="11" MinWidth="62"
                 Content="Copy"
                 ToolTip.Tip="Copy this code block" />
       </Grid>
@@ -30,7 +33,7 @@
                              FontFamily="Cascadia Mono,Consolas,Courier New,monospace"
                              FontSize="13"
                              TextWrapping="NoWrap"
-                             Foreground="{DynamicResource Body}" />
+                             Foreground="{DynamicResource CodeText}" />
       </ScrollViewer>
     </Grid>
   </Border>

@@ -48,7 +48,19 @@ public partial class CodeBlockView : UserControl
         text.Text = null;
         foreach (var token in tokens)
         {
-            text.Inlines?.Add(new Run(token.Text) { Foreground = BrushFor(token.Kind) });
+            var run = new Run(token.Text) { Foreground = BrushFor(token.Kind) };
+
+            // mono has no hue to spend, and its top luminance steps sit close enough that
+            // keyword and type would not separate on lightness alone. Weight and slant are the
+            // legitimate substitute; in the coloured themes they would just be noise on top of
+            // a distinction the colour already makes.
+            if (GuiTheme.Current == GuiTheme.Mono)
+            {
+                if (token.Kind == TokenKind.Keyword) run.FontWeight = FontWeight.SemiBold;
+                if (token.Kind == TokenKind.Comment) run.FontStyle = FontStyle.Italic;
+            }
+
+            text.Inlines?.Add(run);
         }
     }
 
@@ -65,7 +77,7 @@ public partial class CodeBlockView : UserControl
             TokenKind.Comment => "CodeComment",
             TokenKind.Number => "CodeNumber",
             TokenKind.Type => "CodeType",
-            _ => "Body",
+            _ => "CodeText",
         };
 
         return this.TryFindResource(key, out var value) && value is IBrush brush
