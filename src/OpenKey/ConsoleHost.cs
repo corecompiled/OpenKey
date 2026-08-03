@@ -104,6 +104,10 @@ public sealed class ConsoleHost
 
         while (!_exiting)
         {
+            // Before the prompt, not after: a notice that appears once you have already typed
+            // reads as a response to what you typed.
+            ShowUpdateNoticeIfAny();
+
             string? line;
             try
             {
@@ -117,8 +121,6 @@ public sealed class ConsoleHost
             if (line is null) break;                       // EOF / Ctrl+D
             if (_exiting) break;
             if (string.IsNullOrWhiteSpace(line)) continue;
-
-            ShowUpdateNoticeIfAny();
 
             var result = await _commands.HandleAsync(line, CancellationToken.None);
             if (result == CommandResult.Exit) break;
