@@ -332,10 +332,12 @@ public sealed class ConsoleHost
         {
             // No "(attempt 1/3)" counter: showing a retry budget before anything has failed
             // manufactures anxiety. Retries are surfaced only after a failure.
-            var choice = AnsiConsole.Prompt(
-                new SelectionPrompt<string>()
-                    .Title(Components.PickerTitle("How would you like to connect?"))
-                    .AddChoices(OAuthChoice, PasteChoice));
+            var choice = Prompts.Select("How would you like to connect?", new[] { OAuthChoice, PasteChoice });
+            if (choice is null)
+            {
+                Components.HintLine("No option chosen.");
+                continue;
+            }
 
             string? key = null;
 
@@ -471,12 +473,7 @@ public sealed class ConsoleHost
         Components.HintLine("You can create one at https://openrouter.ai/keys");
         AnsiConsole.WriteLine();
 
-        return AnsiConsole.Prompt(
-            new TextPrompt<string>("Key: ")
-                .Secret()
-                .Validate(k => string.IsNullOrWhiteSpace(k)
-                    ? ValidationResult.Error($"[{Theme.Danger}]Paste a key to continue, or press Ctrl+C to go back.[/]")
-                    : ValidationResult.Success()));
+        return Prompts.Secret("Key: ") ?? string.Empty;
     }
 
     private async Task<bool> ValidateAndSaveAsync(string key, CancellationToken ct)
@@ -490,6 +487,9 @@ public sealed class ConsoleHost
                 .SpinnerStyle(new Style(Color.Grey))
                 .StartAsync($"[{Theme.Muted}]Checking your key[/]", async _ =>
                 {
+                    // Auth check first: /models is public and answers 200 for anyone, so on its
+                    // own it would accept any string as a valid key.
+                    await tmp.ValidateKeyAsync(ct);
                     models = await tmp.ListModelsAsync(ct);
                 });
 
@@ -525,7 +525,7 @@ public sealed class ConsoleHost
                 ex.Message,
                 "OpenKey can save the key now and check it the first time you chat.");
 
-            if (AnsiConsole.Confirm("Save the key and continue?", defaultValue: false))
+            if (Prompts.Confirm("Save the key and continue?"))
             {
                 _keyStore.Save(key);
                 return true;

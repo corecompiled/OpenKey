@@ -12,6 +12,21 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   most on a USB stick or someone else's machine.
 - Installable with [Scoop](https://scoop.sh), which also avoids the "unrecognized app" prompt.
 
+## [0.2.1] — 2026-08-03
+
+Two defects that shipped in 0.2.0, both found by using the app rather than reading it.
+
+### Fixed
+
+- **A mistyped or revoked key was accepted and saved.** OpenKey checked keys against an endpoint
+  that doesn't require one, so any text passed. You'd see "Key saved. You're ready to chat", then
+  every message would fail with advice to run `/reset` — which brought you back to the same screen.
+  Keys are now genuinely verified before being saved.
+- **Piped or scripted input crashed the app.** Anything needing a menu — choosing a model,
+  confirming an erase, first-run setup — closed OpenKey with an error when input didn't come from a
+  keyboard. Those now fall back to typing a number or a word.
+- Choosing a model said the choice lasted "until you close OpenKey". It's remembered.
+
 ## [0.2.0] — 2026-08-03
 
 ### Added
@@ -106,6 +121,7 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Commands: `/about`, `/models`, `/model`, `/cls`, `/help`, `/reset`, `/quit`.
 - Single self-contained `.exe` that runs from a USB stick with nothing installed.
 
-[Unreleased]: https://github.com/corecompiled/OpenKey/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/corecompiled/OpenKey/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/corecompiled/OpenKey/releases/tag/v0.2.1
 [0.2.0]: https://github.com/corecompiled/OpenKey/releases/tag/v0.2.0
 [0.1.0]: https://github.com/corecompiled/OpenKey/releases/tag/v0.1.0

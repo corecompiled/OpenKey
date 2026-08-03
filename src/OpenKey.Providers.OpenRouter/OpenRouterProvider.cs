@@ -40,6 +40,50 @@ public sealed class OpenRouterProvider : IChatProvider
     public string Id => "openrouter";
     public string DisplayName => "OpenRouter";
 
+    /// <summary>
+    /// Checks that the key is actually accepted, throwing <see cref="ChatException"/> with
+    /// <see cref="ChatErrorKind.AuthFailure"/> when it is not.
+    /// <para>
+    /// Not part of <see cref="IChatProvider"/> — key acquisition is provider-specific, and both
+    /// hosts already construct this type directly to validate before saving.
+    /// </para>
+    /// <para>
+    /// This exists because <c>GET /models</c> is a <b>public</b> endpoint: it answers 200 with no
+    /// Authorization header at all. Validating against it accepted any string as a valid key, so a
+    /// mistyped key was saved with "You're ready to chat" and then failed on every message, with
+    /// the error advising a <c>/reset</c> that led straight back to the same place.
+    /// <c>GET /key</c> requires authentication and answers 401.
+    /// </para>
+    /// </summary>
+    public async Task ValidateKeyAsync(CancellationToken ct)
+    {
+        using var req = new HttpRequestMessage(HttpMethod.Get, $"{BaseUrl}/key");
+        ApplyHeaders(req);
+
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        cts.CancelAfter(ModelListTimeout);
+
+        HttpResponseMessage resp;
+        try
+        {
+            resp = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, cts.Token);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            throw new ChatException(ChatErrorKind.NetworkDown, "OpenRouter didn't respond in time.");
+        }
+        catch (Exception ex) when (IsNetwork(ex))
+        {
+            throw new ChatException(ChatErrorKind.NetworkDown, "Network unreachable.", null, ex);
+        }
+
+        if (resp.IsSuccessStatusCode) return;
+
+        await using var stream = await resp.Content.ReadAsStreamAsync(cts.Token);
+        var body = await ReadBodyAsync(stream, cts.Token);
+        throw MapHttpError(resp, body);
+    }
+
     public async Task<IReadOnlyList<ModelInfo>> ListModelsAsync(CancellationToken ct)
     {
         using var req = new HttpRequestMessage(HttpMethod.Get, $"{BaseUrl}/models");

@@ -70,6 +70,17 @@ new ModelInfo(
     IsFree: true);
 ```
 
+## Endpoint 1b — `GET /key` (validating a key)
+
+`GET /api/v1/key` with the `Authorization` header. Returns 200 for a usable key and **401** for one
+that is missing, mistyped, or revoked.
+
+Use this — and only this — to check a key before saving it. **`GET /models` is public**: it answers
+200 with no `Authorization` header at all, so validating against it accepts any string as a valid
+key. That is not theoretical; it shipped. The symptom was a mistyped key being saved with "You're
+ready to chat", then failing on every message, with the error advising a `/reset` that led straight
+back to the same screen.
+
 ## Endpoint 2 — `POST /chat/completions` (streaming)
 
 Request body:

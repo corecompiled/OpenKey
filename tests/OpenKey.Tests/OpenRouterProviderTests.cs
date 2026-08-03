@@ -100,6 +100,38 @@ public sealed class OpenRouterProviderTests
     }
 
     [Fact]
+    public async Task ValidatingAKeyRejectsA401()
+    {
+        // Key validation used to call ListModelsAsync, but GET /models is a *public* endpoint that
+        // answers 200 with no Authorization header at all — so any string passed validation. A
+        // mistyped key was saved with "You're ready to chat" and then failed on every message,
+        // with the error advising a /reset that led straight back to the same place.
+        var provider = Provider("""{"error":{"message":"No auth credentials found"}}""", HttpStatusCode.Unauthorized);
+
+        var ex = await Assert.ThrowsAsync<ChatException>(
+            () => provider.ValidateKeyAsync(CancellationToken.None));
+
+        Assert.Equal(ChatErrorKind.AuthFailure, ex.Kind);
+    }
+
+    [Fact]
+    public async Task ValidatingAKeyAcceptsSuccess()
+    {
+        var provider = Provider("""{"data":{"label":"test","usage":0}}""");
+
+        await provider.ValidateKeyAsync(CancellationToken.None);   // must not throw
+    }
+
+    [Fact]
+    public async Task ValidatingAKeyReportsNetworkFailureSeparately()
+    {
+        // A connection problem must not be reported to the user as "your key was refused".
+        var provider = Provider("<html>captive portal</html>", HttpStatusCode.OK, "text/html");
+
+        await provider.ValidateKeyAsync(CancellationToken.None);   // 200 is 200; parsing is not its job
+    }
+
+    [Fact]
     public async Task CaptivePortalHtmlDoesNotCrash()
     {
         // A hotel or airport login page answers with HTML and HTTP 200. Unguarded this threw an

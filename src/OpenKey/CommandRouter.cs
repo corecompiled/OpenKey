@@ -109,7 +109,7 @@ public sealed class CommandRouter
                         + "You'll need to sign in again.",
                     "Only continue if you meant to start completely fresh.");
 
-                if (AnsiConsole.Confirm("Erase everything and start over?", defaultValue: false))
+                if (Prompts.Confirm("Erase everything and start over?"))
                 {
                     await _resetAction(ct);
                 }
@@ -350,16 +350,15 @@ public sealed class CommandRouter
             .Select(m => $"{Truncate(m.DisplayName, 44).PadRight(46)}{FormatContext(m.ContextLength)}")
             .ToList();
 
-        var prompt = new SelectionPrompt<string>
-        {
-            Title = Components.PickerTitle("Which model should answer you?"),
-            PageSize = 12,
-            MoreChoicesText = $"[{Theme.Muted}]More below[/]",
-        };
-        prompt.AddChoice(AutoChoiceLabel);
-        foreach (var row in rows) prompt.AddChoice(row);
+        var choices = new List<string> { AutoChoiceLabel };
+        choices.AddRange(rows);
 
-        string choice = AnsiConsole.Prompt(prompt);
+        var choice = Prompts.Select("Which model should answer you?", choices);
+        if (choice is null)
+        {
+            Components.HintLine("Kept the current choice.");
+            return;
+        }
 
         if (choice == AutoChoiceLabel)
         {
@@ -371,7 +370,7 @@ public sealed class CommandRouter
         var picked = models[rows.IndexOf(choice)];
         _engine.PreferredModelId = picked.Id;
         Components.SuccessLine($"Now using {picked.DisplayName}.");
-        Components.HintLine("This lasts until you close OpenKey.");
+        Components.HintLine("Remembered for next time. Choose Auto to hand the choice back.");
     }
 
     private static string FormatContext(int contextLength) =>
