@@ -607,11 +607,18 @@
        the value the theme happened to have when the message was constructed.
        =================================================================== -->
 
+  <!-- The reading cap lives on the turn, not on the column that holds them, so the two speakers
+       can be bounded differently: a reply is held to the reading width and stays left, while your
+       bubble hugs the right edge of the pane. -->
   <Style Selector="Border.turn">
     <Setter Property="Padding" Value="2,0" />
     <Setter Property="Margin" Value="0,6" />
     <Setter Property="CornerRadius" Value="10" />
     <Setter Property="Background" Value="Transparent" />
+    <Setter Property="HorizontalAlignment" Value="Left" />
+    <!-- Dynamic, not static: a StyleInclude is processed before Application.Resources is
+         populated, so a StaticResource here cannot resolve and takes the app down at startup. -->
+    <Setter Property="MaxWidth" Value="{DynamicResource ReadingWidth}" />
   </Style>
 
   <!-- Your own message hugs its text and sits on the right; the reply stays full width on the

@@ -22,6 +22,8 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the conversation. A wide code block in a reply no longer inflates every message you sent.
 - **The message box spans the conversation** instead of stopping short of the right edge, which was
   most obvious on a maximised window with an empty chat.
+- Your messages now reach the right edge of the conversation, level with the message box. They were
+  aligned to the right of the reading column rather than the pane, so they stopped short of it.
 - **A waiting indicator while the model thinks** — three dots that pulse in turn, shown from the
   moment you send until the first word arrives. The blinking caret now only appears once text is
   actually coming in, so an empty caret can no longer look like a stall.

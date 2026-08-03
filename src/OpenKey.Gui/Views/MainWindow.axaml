@@ -206,9 +206,11 @@
                          Text="Type a message below and press Enter." />
             </StackPanel>
 
-            <!-- The reading column. Uncapped, a maximised window puts ~220 characters on a line. -->
-            <StackPanel Spacing="4" MaxWidth="{StaticResource ReadingWidth}"
-                        HorizontalAlignment="Left">
+            <!-- Spans the pane. The reading cap moved onto the turns themselves: a reply is held
+                 to the reading width from the left, while your own bubble anchors to the right
+                 edge. Capping here instead meant the bubbles right-aligned to a 720 column pinned
+                 left, so they stopped well short of the pane and of the composer below them. -->
+            <StackPanel Spacing="4">
 
             <ItemsControl ItemsSource="{Binding Messages}">
               <ItemsControl.ItemTemplate>
