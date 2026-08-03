@@ -1,16 +1,16 @@
 {
-    "version": "0.2.0",
+    "version": "0.2.1",
     "description": "Chat with capable AI models for free, from a single Windows exe. No install, no subscription.",
     "homepage": "https://github.com/corecompiled/OpenKey",
     "license": "MIT",
     "architecture": {
         "64bit": {
-            "url": "https://github.com/corecompiled/OpenKey/releases/download/v0.2.0/OpenKey-win-x64.exe#/OpenKey.exe",
-            "hash": "1cf95b6bdcd881962172ac21d45232264c086ba2706e7f9e66bef002232f8341"
+            "url": "https://github.com/corecompiled/OpenKey/releases/download/v0.2.1/OpenKey-win-x64.exe#/OpenKey.exe",
+            "hash": "8cefd534a388751dc0b5d4bd610b84557142704b5acbb428a6501671f2805a60"
         },
         "arm64": {
-            "url": "https://github.com/corecompiled/OpenKey/releases/download/v0.2.0/OpenKey-win-arm64.exe#/OpenKey.exe",
-            "hash": "1be2fdba94f1d8311ae62fa3394883f7ed1ce02733c18e054326453f8134b717"
+            "url": "https://github.com/corecompiled/OpenKey/releases/download/v0.2.1/OpenKey-win-arm64.exe#/OpenKey.exe",
+            "hash": "368528f35495ac24fb38229e187d496c73931474d168511d8ff37282f51cb8d0"
         }
     },
     "bin": "OpenKey.exe",
