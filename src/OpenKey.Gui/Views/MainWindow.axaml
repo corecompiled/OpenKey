@@ -1,0 +1,247 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:OpenKey.Gui.ViewModels"
+        xmlns:conv="using:OpenKey.Gui.Converters"
+        xmlns:views="using:OpenKey.Gui.Views"
+        xmlns:core="using:OpenKey.Core.Providers"
+        x:Class="OpenKey.Gui.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Title="OpenKey"
+        Width="900" Height="680"
+        MinWidth="560" MinHeight="420"
+        Background="{DynamicResource Surface}">
+
+  <Window.Resources>
+    <conv:StatusBrushConverter x:Key="StatusBrush" />
+  </Window.Resources>
+
+  <!-- Window-level so they work wherever focus happens to be. Escape stopping a reply matters
+       most: it is the one thing someone reaches for in a hurry. -->
+  <Window.KeyBindings>
+    <KeyBinding Gesture="Escape" Command="{Binding StopCommand}" />
+    <KeyBinding Gesture="Ctrl+L" Command="{Binding ClearCommand}" />
+  </Window.KeyBindings>
+
+  <Window.Styles>
+    <Style Selector="Button.primary">
+      <Setter Property="Background" Value="{DynamicResource Brand}" />
+      <Setter Property="Foreground" Value="{DynamicResource OnBrand}" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Padding" Value="16,8" />
+      <Setter Property="CornerRadius" Value="6" />
+    </Style>
+    <Style Selector="Button.ghost">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="{DynamicResource Muted}" />
+      <Setter Property="Padding" Value="10,6" />
+      <Setter Property="CornerRadius" Value="6" />
+    </Style>
+    <Style Selector="Button.ghost:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource SurfaceRaised}" />
+    </Style>
+  </Window.Styles>
+
+  <Grid RowDefinitions="Auto,*,Auto">
+
+    <!-- Header -->
+    <Border Grid.Row="0" Background="{DynamicResource SurfaceRaised}" Padding="16,10"
+            BorderBrush="{DynamicResource Line}" BorderThickness="0,0,0,1">
+      <Grid ColumnDefinitions="Auto,*,Auto">
+        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+          <TextBlock Text="OpenKey" FontSize="16" FontWeight="Bold"
+                     Foreground="{DynamicResource Brand}" VerticalAlignment="Center" />
+          <TextBlock Text="{Binding Version, StringFormat='v{0}'}" FontSize="12"
+                     Foreground="{DynamicResource Muted}" VerticalAlignment="Center" />
+        </StackPanel>
+
+        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" IsVisible="{Binding IsReady}">
+
+          <!-- Conversation actions only. Settings live behind the menu at the end, so a per-app
+               preference is never wedged between per-conversation verbs. -->
+          <ComboBox ItemsSource="{Binding Models}"
+                    SelectedItem="{Binding SelectedModel}"
+                    MinWidth="210"
+                    ToolTip.Tip="Choose which model answers you">
+            <ComboBox.ItemTemplate>
+              <DataTemplate x:DataType="vm:ModelChoice">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                  <TextBlock Text="{Binding Label}" VerticalAlignment="Center" />
+                  <TextBlock Text="{Binding Detail}" IsVisible="{Binding HasDetail}"
+                             Foreground="{DynamicResource Muted}" FontSize="11"
+                             VerticalAlignment="Center" />
+                </StackPanel>
+              </DataTemplate>
+            </ComboBox.ItemTemplate>
+          </ComboBox>
+
+          <Button Classes="ghost" Content="Clear" Click="OnClearChat"
+                  ToolTip.Tip="Clear this chat, keeping your key (Ctrl+L)" />
+          <Button Classes="ghost" Content="Retry" Click="OnRetry"
+                  IsEnabled="{Binding IsIdle}"
+                  ToolTip.Tip="Send your last message again" />
+          <Button Classes="ghost" Content="Copy" Click="OnCopyLast"
+                  ToolTip.Tip="Copy the last reply" />
+          <Button Classes="ghost" Content="Export" Click="OnExport"
+                  ToolTip.Tip="Save this conversation as a markdown file" />
+
+          <Button Classes="ghost" Content="&#x22EF;" FontSize="16" Padding="10,2"
+                  ToolTip.Tip="Settings">
+            <Button.Flyout>
+              <MenuFlyout Placement="BottomEdgeAlignedRight">
+                <MenuItem Header="Theme">
+                  <MenuItem Header="Default" Click="OnThemeMenu" Tag="default" />
+                  <MenuItem Header="Dark" Click="OnThemeMenu" Tag="dark" />
+                  <MenuItem Header="Light" Click="OnThemeMenu" Tag="light" />
+                  <MenuItem Header="Mono" Click="OnThemeMenu" Tag="mono" />
+                </MenuItem>
+                <Separator />
+                <MenuItem Header="About OpenKey" Click="OnAbout" />
+                <Separator />
+                <!-- Destructive, so it sits alone at the bottom behind a menu, where it cannot be
+                     hit while reaching for Export. -->
+                <MenuItem Header="Erase everything…" Click="OnResetClicked"
+                          Foreground="{DynamicResource Danger}" />
+              </MenuFlyout>
+            </Button.Flyout>
+          </Button>
+        </StackPanel>
+      </Grid>
+    </Border>
+
+    <!-- Body: sign-in or conversation -->
+    <Panel Grid.Row="1">
+
+      <!-- First run -->
+      <Border IsVisible="{Binding NeedsKey}" Padding="32" MaxWidth="560" VerticalAlignment="Center">
+        <StackPanel Spacing="14">
+          <TextBlock Text="Welcome to OpenKey" FontSize="22" FontWeight="Bold"
+                     Foreground="{DynamicResource Body}" />
+          <TextBlock TextWrapping="Wrap" Foreground="{DynamicResource Body}"
+                     Text="Chat with capable AI models for free, with no subscription." />
+          <TextBlock TextWrapping="Wrap" Foreground="{DynamicResource Muted}"
+                     Text="You need a free OpenRouter key once. OpenKey encrypts it for your Windows account and keeps it on this PC. It is never sent anywhere except OpenRouter." />
+
+          <Button Classes="primary" Content="Sign in with my browser"
+                  HorizontalAlignment="Left" Click="OnSignIn"
+                  IsEnabled="{Binding !IsSigningIn}" />
+
+          <TextBlock Text="or paste a key you already have" Foreground="{DynamicResource Muted}"
+                     FontSize="12" Margin="0,8,0,0" />
+          <Grid ColumnDefinitions="*,Auto" >
+            <TextBox Grid.Column="0" PasswordChar="•" Watermark="Key"
+                     Text="{Binding KeyInput}" Margin="0,0,8,0" />
+            <Button Grid.Column="1" Content="Use key" Click="OnUseKey"
+                    IsEnabled="{Binding !IsSigningIn}" />
+          </Grid>
+          <TextBlock Foreground="{DynamicResource Muted}" FontSize="12"
+                     Text="Create one at openrouter.ai/keys" />
+        </StackPanel>
+      </Border>
+
+      <!-- Conversation -->
+      <Grid IsVisible="{Binding IsReady}" RowDefinitions="*">
+        <ScrollViewer Name="Scroller" Padding="20,16">
+          <StackPanel Spacing="18">
+
+            <Border IsVisible="{Binding IsConversationEmpty}" Padding="24" Margin="0,40,0,0">
+              <StackPanel Spacing="8" HorizontalAlignment="Center">
+                <TextBlock Text="Ask anything" FontSize="18" FontWeight="SemiBold"
+                           Foreground="{DynamicResource Body}" HorizontalAlignment="Center" />
+                <TextBlock Foreground="{DynamicResource Muted}" HorizontalAlignment="Center"
+                           Text="Type a message below and press Enter." />
+              </StackPanel>
+            </Border>
+
+            <ItemsControl ItemsSource="{Binding Messages}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:MessageViewModel">
+                  <StackPanel Spacing="6" Margin="0,0,0,14">
+
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                      <TextBlock Text="{Binding Header}" FontWeight="SemiBold" FontSize="13"
+                                 Foreground="{DynamicResource Brand}" />
+                      <TextBlock Text="{Binding Subtitle}" FontSize="12" VerticalAlignment="Center"
+                                 Foreground="{DynamicResource Muted}" />
+                    </StackPanel>
+
+                    <ItemsControl ItemsSource="{Binding Blocks}">
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:MarkdownBlock">
+                          <Panel Margin="0,2">
+                            <!-- Code fence: syntax highlighted, with its own copy button -->
+                            <views:CodeBlockView IsVisible="{Binding IsCode}" />
+
+                            <!-- Horizontal rule -->
+                            <Border IsVisible="{Binding IsRule}" Height="1" Margin="0,8"
+                                    Background="{DynamicResource Line}" />
+
+                            <!-- Everything else -->
+                            <SelectableTextBlock IsVisible="{Binding IsNotCode}"
+                                                 Text="{Binding Text}"
+                                                 TextWrapping="Wrap"
+                                                 FontSize="{Binding FontSize}"
+                                                 Margin="{Binding LeftMargin}"
+                                                 Foreground="{DynamicResource Body}" />
+                          </Panel>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <TextBlock Text="▍" IsVisible="{Binding IsStreaming}"
+                               Foreground="{DynamicResource Brand}" FontSize="13" />
+                  </StackPanel>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </ScrollViewer>
+      </Grid>
+    </Panel>
+
+    <!-- Composer + status -->
+    <Border Grid.Row="2" Background="{DynamicResource SurfaceRaised}" Padding="16,12"
+            BorderBrush="{DynamicResource Line}" BorderThickness="0,1,0,0"
+            IsVisible="{Binding IsReady}">
+      <StackPanel Spacing="8">
+
+        <Border IsVisible="{Binding HasStatus}" CornerRadius="6" Padding="10,7"
+                Background="{DynamicResource CodeSurface}"
+                BorderThickness="0,0,0,2"
+                BorderBrush="{Binding StatusKind, Converter={StaticResource StatusBrush}}">
+          <Grid ColumnDefinitions="*,Auto,Auto">
+            <TextBlock Grid.Column="0" Text="{Binding Status}" TextWrapping="Wrap"
+                       VerticalAlignment="Center"
+                       Foreground="{DynamicResource Body}" FontSize="12" />
+            <!-- Undo lives in the message that announced the loss, which is where someone who has
+                 just realised their mistake is already looking. -->
+            <Button Grid.Column="1" Classes="ghost" Content="Undo" Click="OnUndoClear"
+                    IsVisible="{Binding CanUndoClear}"
+                    Foreground="{DynamicResource Brand}" FontSize="12" Padding="8,2" />
+            <Button Grid.Column="2" Classes="ghost" Content="✕" Click="OnDismissStatus"
+                    Padding="6,0" FontSize="11" VerticalAlignment="Center" />
+          </Grid>
+        </Border>
+
+        <Grid ColumnDefinitions="*,Auto">
+          <TextBox Name="Composer" Grid.Column="0"
+                   Text="{Binding Draft}"
+                   Watermark="Type a message, then press Enter"
+                   AcceptsReturn="True"
+                   TextWrapping="Wrap"
+                   MaxHeight="160"
+                   VerticalContentAlignment="Center"
+                   Margin="0,0,8,0" />
+
+          <Button Grid.Column="1" Classes="primary" Content="Send"
+                  Click="OnSend" IsVisible="{Binding IsIdle}"
+                  IsEnabled="{Binding CanSend}" VerticalAlignment="Bottom" />
+          <Button Grid.Column="1" Classes="ghost" Content="Stop"
+                  Click="OnStop" IsVisible="{Binding IsBusy}" VerticalAlignment="Bottom" />
+        </Grid>
+
+        <TextBlock Text="Enter sends · Shift+Enter adds a line · Esc stops · Ctrl+L clears" FontSize="11"
+                   Foreground="{DynamicResource Muted}" />
+      </StackPanel>
+    </Border>
+  </Grid>
+</Window>

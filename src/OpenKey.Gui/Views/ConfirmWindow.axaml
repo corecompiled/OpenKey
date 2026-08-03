@@ -1,0 +1,27 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="OpenKey.Gui.Views.ConfirmWindow"
+        Width="440" SizeToContent="Height"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        Background="{StaticResource Surface}"
+        Title="OpenKey">
+
+  <Border Padding="22">
+    <StackPanel Spacing="14">
+      <TextBlock Name="TitleText" FontSize="17" FontWeight="Bold"
+                 Foreground="{StaticResource Body}" TextWrapping="Wrap" />
+      <TextBlock Name="BodyText" TextWrapping="Wrap"
+                 Foreground="{StaticResource Muted}" />
+
+      <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" Margin="0,8,0,0">
+        <!-- Cancel is the default and gets focus: a destructive action must never be one
+             stray Enter away. -->
+        <Button Name="CancelButton" Content="Cancel" Click="OnCancel" IsDefault="True" Padding="16,8" />
+        <Button Name="ConfirmButton" Click="OnConfirm" Padding="16,8"
+                Background="#7F1D1D" Foreground="#FEE2E2" FontWeight="SemiBold" />
+      </StackPanel>
+    </StackPanel>
+  </Border>
+</Window>

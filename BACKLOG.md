@@ -65,6 +65,15 @@ Also fixed en route: `Microsoft.ML.Tokenizers` 2.0.0 pulls in `Microsoft.Bcl.Mem
 carries a known high-severity advisory (GHSA-73j8-2gch-69rq). NuGet audit failed the build; pinned
 forward to 10.0.10.
 
+### Phase 2 — Avalonia GUI — 2026-08-03
+
+Shipped to the roadmap's bar: parity with the console feature set plus mouse selection, copy
+buttons on code blocks, and syntax highlighting. `OpenKeyApp.exe` builds AOT and ships from the
+same tag as the console.
+
+`OpenKey.Windows` was extracted so both hosts share DPAPI, app paths, OAuth and the tokenizer.
+`OpenKey.Core` still has zero package references.
+
 ### v0.1.0 — 2026-05-28
 
 First release. See [`CHANGELOG.md`](CHANGELOG.md#010--2026-05-28).
@@ -75,8 +84,16 @@ First release. See [`CHANGELOG.md`](CHANGELOG.md#010--2026-05-28).
 
 Ordered by user value within tier. Lowest tier wins.
 
-Tier 2 and Tier 3 are complete — see **Done** above. What remains is Tier 4, which is Phase 5 work
-and a step change in scope rather than more polish.
+Tier 2, Tier 3 and Tier 5's Phase 2 (the GUI) are complete — see **Done** above. What remains is
+Tier 4, which is Phase 5 work and a step change in scope rather than more polish.
+
+Smaller GUI follow-ups, none blocking:
+
+- Inline bold/italic inside paragraphs. The block model supports it; the renderer currently
+  flattens inline formatting to plain text.
+- Window size and position persistence. Deliberately skipped: `config.json`'s shape is a contract
+  surface documented in `docs/05`, and window bounds do not belong in it without a decision.
+- Per-message copy buttons, in addition to the toolbar's copy-last and the per-code-block copy.
 
 ### Tier 4 — providers
 

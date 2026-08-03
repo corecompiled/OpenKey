@@ -4,7 +4,7 @@ using OpenKey.Core.AppPaths;
 using OpenKey.Core.Providers;
 using OpenKey.Core.Storage;
 
-namespace OpenKey;
+namespace OpenKey.Windows;
 
 public sealed class DpapiKeyStore : IKeyStore
 {

@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!-- Windows-only by necessity: DPAPI and the console/browser handoff. Kept out of
+         OpenKey.Core so the shared layer stays platform-neutral for a future PWA or Android
+         port — see docs/architecture/01-layers.md. -->
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <RootNamespace>OpenKey.Windows</RootNamespace>
+    <AssemblyName>OpenKey.Windows</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="OpenKey.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.ML.Tokenizers" Version="2.0.0" />
+    <!-- Embeds the vocabulary so token counting needs no network call on first run. -->
+    <PackageReference Include="Microsoft.ML.Tokenizers.Data.Cl100kBase" Version="2.0.0" />
+    <!-- Transitive via Microsoft.ML.Tokenizers, which pins 9.0.4 — a version with a known
+         high-severity advisory (GHSA-73j8-2gch-69rq). Pinned forward explicitly; NuGet audit
+         fails the build if this regresses. -->
+    <PackageReference Include="Microsoft.Bcl.Memory" Version="10.0.10" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.10" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\OpenKey.Core\OpenKey.Core.csproj" />
+    <ProjectReference Include="..\OpenKey.Providers.OpenRouter\OpenKey.Providers.OpenRouter.csproj" />
+  </ItemGroup>
+</Project>

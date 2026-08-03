@@ -1,4 +1,4 @@
-namespace OpenKey.OAuth;
+namespace OpenKey.Windows.OAuth;
 
 public sealed class OAuthPortInUseException : Exception
 {

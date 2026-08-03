@@ -1,0 +1,31 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="OpenKey.Gui.App"
+             RequestedThemeVariant="Dark">
+
+  <Application.Styles>
+    <FluentTheme />
+  </Application.Styles>
+
+  <!-- Seed values only. GuiTheme.Apply overwrites every one of these at startup and on a theme
+       switch, which is why the views bind with DynamicResource rather than StaticResource. -->
+  <Application.Resources>
+    <SolidColorBrush x:Key="Surface" Color="#0F172A" />
+    <SolidColorBrush x:Key="SurfaceRaised" Color="#1E293B" />
+    <SolidColorBrush x:Key="CodeSurface" Color="#0B1220" />
+    <SolidColorBrush x:Key="Line" Color="#334155" />
+    <SolidColorBrush x:Key="Body" Color="#E2E8F0" />
+    <SolidColorBrush x:Key="Muted" Color="#94A3B8" />
+    <SolidColorBrush x:Key="Brand" Color="#22D3EE" />
+    <SolidColorBrush x:Key="Ok" Color="#4ADE80" />
+    <SolidColorBrush x:Key="Warn" Color="#FBBF24" />
+    <SolidColorBrush x:Key="Danger" Color="#F87171" />
+    <SolidColorBrush x:Key="OnBrand" Color="#04121A" />
+
+    <SolidColorBrush x:Key="CodeKeyword" Color="#C4B5FD" />
+    <SolidColorBrush x:Key="CodeString" Color="#86EFAC" />
+    <SolidColorBrush x:Key="CodeComment" Color="#64748B" />
+    <SolidColorBrush x:Key="CodeNumber" Color="#FCD34D" />
+    <SolidColorBrush x:Key="CodeType" Color="#7DD3FC" />
+  </Application.Resources>
+</Application>

@@ -44,6 +44,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\OpenKey.Core\OpenKey.Core.csproj" />
+    <ProjectReference Include="..\OpenKey.Windows\OpenKey.Windows.csproj" />
     <ProjectReference Include="..\OpenKey.Providers.OpenRouter\OpenKey.Providers.OpenRouter.csproj" />
   </ItemGroup>
 </Project>

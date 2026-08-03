@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace OpenKey.OAuth;
+namespace OpenKey.Windows.OAuth;
 
 /// <summary>
 /// Body for <c>POST /api/v1/auth/keys</c>, the PKCE code-for-key exchange documented in

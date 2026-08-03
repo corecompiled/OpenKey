@@ -5,6 +5,30 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-08-03
+
+### Added
+
+- **A windowed app.** `OpenKeyApp.exe` ships alongside the console from the same release: the same
+  chat, the same models, the same saved conversation, in a normal window. Code blocks are syntax
+  highlighted and have their own copy button, text is selectable with the mouse, and there are
+  buttons for new chat, retry, copy, export, model choice, theme and about.
+- Four colour themes in both surfaces — default, dark, light and mono — remembered between runs and
+  shared between the console and the app.
+- Keyboard shortcuts in the app: Enter sends, Shift+Enter adds a line, Esc stops a reply, Ctrl+L
+  clears the chat.
+- **Clear can be undone.** Clearing a chat offers an Undo for as long as you haven't sent anything
+  new, so a misclick doesn't cost you the conversation.
+
+### Changed
+
+- The app's "New chat" button is now "Clear". It never started a new conversation alongside the old
+  one — it ended the only one there is — and the old label implied otherwise.
+- Theme, About and Erase everything moved into a settings menu, leaving the toolbar for things that
+  act on the conversation. Erase now sits alone at the bottom of that menu, away from Export.
+- The model picker has an **Automatic** option again, so you can hand the choice back to OpenKey
+  after picking a specific model.
+
 ## [0.2.1] — 2026-08-03
 
 Two defects that shipped in 0.2.0, both found by using the app rather than reading it — plus a
@@ -57,6 +81,13 @@ much smaller, faster binary.
 
 ### Fixed
 
+- **A mistyped or revoked key was accepted and saved.** OpenKey checked keys against an endpoint
+  that does not require one, so any text passed — and then every message failed, with advice that
+  led back to the same place. Keys are now genuinely verified before being saved.
+- **Piped or scripted input crashed the app.** Anything that needed a menu — choosing a model,
+  confirming an erase, first-run setup — closed OpenKey with an error when input didn't come from
+  a keyboard. Those now fall back to typing a number or a word.
+- Choosing a model said the choice lasted "until you close OpenKey"; it is remembered.
 - Links whose address contained a bracket lost their target when displayed.
 - A message that kept failing could retry for several minutes; it is now bounded, and a reply
   that is genuinely arriving is never cut off.
@@ -122,7 +153,8 @@ much smaller, faster binary.
 - Commands: `/about`, `/models`, `/model`, `/cls`, `/help`, `/reset`, `/quit`.
 - Single self-contained `.exe` that runs from a USB stick with nothing installed.
 
-[Unreleased]: https://github.com/corecompiled/OpenKey/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/corecompiled/OpenKey/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/corecompiled/OpenKey/releases/tag/v0.3.0
 [0.2.1]: https://github.com/corecompiled/OpenKey/releases/tag/v0.2.1
 [0.2.0]: https://github.com/corecompiled/OpenKey/releases/tag/v0.2.0
 [0.1.0]: https://github.com/corecompiled/OpenKey/releases/tag/v0.1.0

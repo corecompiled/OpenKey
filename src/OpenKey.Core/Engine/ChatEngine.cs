@@ -92,6 +92,25 @@ public sealed class ChatEngine
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Puts a previous conversation back and re-persists it. Exists so a host can offer undo after
+    /// clearing — destroying someone's conversation should be reversible, and a confirmation
+    /// dialog interrupts everyone to protect against a rare mistake, where undo costs nothing
+    /// until it is needed.
+    /// </summary>
+    public async Task RestoreTurnsAsync(IReadOnlyList<ChatMessage> turns, CancellationToken ct)
+    {
+        _turns.Clear();
+        _turns.AddRange(turns);
+
+        if (_turns.Count == 0 || _turns[0].Role != ChatMessage.SystemRole)
+            _turns.Insert(0, new ChatMessage(ChatMessage.SystemRole, DefaultSystemPrompt));
+
+        await _sessions.SaveAsync(
+            new SessionSnapshot(ActiveModel?.Id ?? string.Empty, DateTimeOffset.UtcNow, _turns.ToArray()),
+            ct);
+    }
+
     public async IAsyncEnumerable<ChatChunk> SendAsync(
         string userText,
         [EnumeratorCancellation] CancellationToken ct)
