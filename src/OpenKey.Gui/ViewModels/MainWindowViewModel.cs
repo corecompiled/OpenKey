@@ -218,6 +218,10 @@ public sealed class MainWindowViewModel : ObservableObject
         try
         {
             var probe = new OpenRouterProvider(_http, () => key);
+
+            // Auth check first: /models is public and answers 200 for anyone, so on its own it
+            // would accept any string as a valid key.
+            await probe.ValidateKeyAsync(CancellationToken.None);
             var models = await probe.ListModelsAsync(CancellationToken.None);
             if (models.Count == 0)
             {

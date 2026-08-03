@@ -66,6 +66,13 @@ much smaller, faster binary.
 
 ### Fixed
 
+- **A mistyped or revoked key was accepted and saved.** OpenKey checked keys against an endpoint
+  that does not require one, so any text passed — and then every message failed, with advice that
+  led back to the same place. Keys are now genuinely verified before being saved.
+- **Piped or scripted input crashed the app.** Anything that needed a menu — choosing a model,
+  confirming an erase, first-run setup — closed OpenKey with an error when input didn't come from
+  a keyboard. Those now fall back to typing a number or a word.
+- Choosing a model said the choice lasted "until you close OpenKey"; it is remembered.
 - Links whose address contained a bracket lost their target when displayed.
 - A message that kept failing could retry for several minutes; it is now bounded, and a reply
   that is genuinely arriving is never cut off.
