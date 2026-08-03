@@ -1,33 +1,50 @@
 {
-    "version": "0.2.1",
+    "version": "0.3.0",
     "description": "Chat with capable AI models for free, from a single Windows exe. No install, no subscription.",
     "homepage": "https://github.com/corecompiled/OpenKey",
     "license": "MIT",
     "architecture": {
         "64bit": {
-            "url": "https://github.com/corecompiled/OpenKey/releases/download/v0.2.1/OpenKey-win-x64.exe#/OpenKey.exe",
-            "hash": "8cefd534a388751dc0b5d4bd610b84557142704b5acbb428a6501671f2805a60"
+            "url": [
+                "https://github.com/corecompiled/OpenKey/releases/download/v0.3.0/OpenKey-win-x64.exe#/OpenKey.exe",
+                "https://github.com/corecompiled/OpenKey/releases/download/v0.3.0/OpenKeyApp-win-x64.exe#/OpenKeyApp.exe"
+            ],
+            "hash": [
+                "37e170819d34cc2d5126394ba0781ad1a25ae4c421b53ae5febefe80b43e82ba",
+                "5d756bff26be3b18bd6685781a549797a939cfb376a1e0fc5df90df2bf0367f7"
+            ]
         },
         "arm64": {
-            "url": "https://github.com/corecompiled/OpenKey/releases/download/v0.2.1/OpenKey-win-arm64.exe#/OpenKey.exe",
-            "hash": "368528f35495ac24fb38229e187d496c73931474d168511d8ff37282f51cb8d0"
+            "url": [
+                "https://github.com/corecompiled/OpenKey/releases/download/v0.3.0/OpenKey-win-arm64.exe#/OpenKey.exe",
+                "https://github.com/corecompiled/OpenKey/releases/download/v0.3.0/OpenKeyApp-win-arm64.exe#/OpenKeyApp.exe"
+            ],
+            "hash": [
+                "f1fff7a7d9e620298bfb19c10022ae29716d9b9c94eab5802cda8e3fe1b4adc0",
+                "721b11c9a3450eb03e4ef160cf6ad75cee6995b377483e744fccebc0447e73f6"
+            ]
         }
     },
-    "bin": "OpenKey.exe",
+    "bin": [
+        "OpenKey.exe",
+        "OpenKeyApp.exe"
+    ],
     "shortcuts": [
         [
-            "OpenKey.exe",
+            "OpenKeyApp.exe",
             "OpenKey"
         ]
     ],
     "notes": [
-        "Run 'openkey' from any terminal, or use the Start menu shortcut.",
+        "Two ways to use it, sharing the same key and conversation:",
+        "  OpenKeyApp   a normal window — also on your Start menu",
+        "  openkey      the terminal version",
         "",
         "On first run OpenKey asks for a free OpenRouter key and can fetch one through your browser.",
         "Your key is encrypted for your Windows account; settings live in %APPDATA%\\OpenKey.",
         "",
         "'scoop uninstall openkey' removes the app but leaves %APPDATA%\\OpenKey alone.",
-        "Run '/reset' inside OpenKey first if you want your key and conversation erased too."
+        "Use 'Erase everything' inside OpenKey first if you want your key and conversation gone too."
     ],
     "checkver": {
         "github": "https://github.com/corecompiled/OpenKey"
@@ -35,10 +52,16 @@
     "autoupdate": {
         "architecture": {
             "64bit": {
-                "url": "https://github.com/corecompiled/OpenKey/releases/download/v$version/OpenKey-win-x64.exe#/OpenKey.exe"
+                "url": [
+                    "https://github.com/corecompiled/OpenKey/releases/download/v$version/OpenKey-win-x64.exe#/OpenKey.exe",
+                    "https://github.com/corecompiled/OpenKey/releases/download/v$version/OpenKeyApp-win-x64.exe#/OpenKeyApp.exe"
+                ]
             },
             "arm64": {
-                "url": "https://github.com/corecompiled/OpenKey/releases/download/v$version/OpenKey-win-arm64.exe#/OpenKey.exe"
+                "url": [
+                    "https://github.com/corecompiled/OpenKey/releases/download/v$version/OpenKey-win-arm64.exe#/OpenKey.exe",
+                    "https://github.com/corecompiled/OpenKey/releases/download/v$version/OpenKeyApp-win-arm64.exe#/OpenKeyApp.exe"
+                ]
             }
         },
         "hash": {
