@@ -11,6 +11,74 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   with the link — nothing is ever downloaded or installed for you. Turn it off with
   `"checkForUpdates": false` in `config.json`; see `SECURITY.md` for exactly what the check sends,
   which is nothing beyond the request itself.
+- **OpenKey has an icon.** It appears in Explorer, the taskbar, the Start menu and alt-tab, on both
+  the console and the desktop app.
+- **Choose what OpenKey calls you.** `/name Sam` in the console, or **⋯ → Your name…** in the app.
+  It defaults to your Windows account name, so it never interrupts you to ask. The name is a label
+  on your screen only — it is never sent to a model, and exports still say "You", so a transcript
+  you share does not carry a name you did not choose to put in it.
+- **The chat list is resizable.** Drag its edge; it remembers nothing between launches yet.
+- **Your messages sit in a bubble on the right** that fits the text, instead of stretching across
+  the conversation. A wide code block in a reply no longer inflates every message you sent.
+- **The message box spans the conversation** instead of stopping short of the right edge, which was
+  most obvious on a maximised window with an empty chat.
+- **A waiting indicator while the model thinks** — three dots that pulse in turn, shown from the
+  moment you send until the first word arrives. The blinking caret now only appears once text is
+  actually coming in, so an empty caret can no longer look like a stall.
+- **`OPENKEY_HOME`** points OpenKey at a different folder for its files. Mainly for trying things
+  out without touching your real conversations; your key is still encrypted for your Windows
+  account wherever the folder lives.
+- **Replies now show bold, italic and inline code.** Links appear as links instead of the address
+  being dumped in brackets after the text.
+- **The toolbar is quieter.** New chat moved to the top of the chat list, where the chat it creates
+  appears — it still shows in the toolbar when the list is hidden, so Ctrl+N always has a button.
+  Copy moved onto each reply. The model picker moved down beside the message box, next to the Send
+  it applies to. Export stayed put.
+- **"Try again" appears on your message when a reply fails or you stop it**, so a send that went
+  nowhere can be repeated without retyping.
+
+### Changed
+
+- **The light theme reads properly now.** Buttons, captions, hints and timestamps were all sitting
+  at the bare minimum contrast against a heavy beige, so the whole interface looked faint even
+  though the message text itself was fine. Those labels are ~50% stronger and the backgrounds lost
+  most of their yellow.
+- **Code blocks stand out from the page**, in every theme. In `mono` especially the snippet had
+  almost no background of its own, so it floated on the page; it now has a visible panel and edge,
+  and its comments, strings and keywords are properly separated.
+- **The chat list runs the full height of the window.** The message box used to stretch underneath
+  it, leaving an empty corner at the bottom left.
+- **The colours were redone, all four themes.** The light theme in particular was flat — its
+  surfaces were so close together that the window read as one sheet held together by hairlines,
+  which is what "too light" was actually describing. Every theme now has clearly separated
+  foreground and background layers.
+- **Buttons respond to being pressed.** Hover, press and focus states throughout, including in the
+  two dialogs, which previously used none of the app's styling at all.
+- **Your messages sit on a card, replies sit on the page**, so you can find your own question in a
+  long conversation at a glance.
+- Replies are held to a comfortable reading width instead of stretching the full window, and text
+  has more room to breathe.
+
+### Fixed
+
+- The primary button lost its colour when you hovered over it.
+- "Erase everything…" stopped looking dangerous at the exact moment you pointed at it.
+- The confirmation dialog ignored your theme and always showed dark colours, with a dark red
+  "Close" button on the About box.
+- The status bar showed dark-theme colours in the light theme, and put colour into `mono`, whose
+  entire purpose is not to have any.
+- The button for dismissing an error message was the smallest control in the app.
+- "Try again" added a second copy of your message instead of replacing the one that failed.
+- The Copy button inside a code block was a different size from the one on a reply.
+- Hiding the chat list left an empty strip where it had been, instead of giving the space back to
+  the conversation.
+- A command typed or pasted with a leading space — or an invisible character left behind by a paste
+  from a file or a web page — was not recognised, and got sent to the model as a message instead.
+- Switching theme left the status bar's colour from the previous theme until the next message.
+- The message box and the status bar sat 236px to the left of the conversation, tucked under the
+  chat list, instead of lining up with the replies above them.
+- Copy copied the *most recent* reply rather than the one you were looking at, so copying an older
+  answer silently gave you a different message.
 
 ## [0.3.0] — 2026-08-03
 
