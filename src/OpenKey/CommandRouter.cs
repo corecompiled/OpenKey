@@ -526,6 +526,7 @@ public sealed class CommandRouter
         Components.KeyValuePanel("About OpenKey", new (string, string)[]
         {
             ("Version", Components.Version),
+            ("This chat", _engine.CurrentChatId is null ? "Not saved yet — send a message" : _engine.CurrentChatTitle),
             ("Answering with", _engine.ActiveModel?.Id ?? "Nothing yet — send a message"),
             ("Model choice", _engine.PreferredModelId ?? "Automatic"),
             ("Your data", _paths.RootDir),

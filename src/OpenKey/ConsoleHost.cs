@@ -291,7 +291,14 @@ public sealed class ConsoleHost
         Components.StatusCard(severity, title, detail, next);
     }
 
-    private static void ClearAndShowChatHeader() => Components.HomeHeader();
+    private void ClearAndShowChatHeader()
+    {
+        Components.HomeHeader();
+
+        // Only worth naming once there is more than one conversation to confuse it with.
+        var count = _engine.Turns.Count(t => t.Role != ChatMessage.SystemRole);
+        if (count > 0) Components.ChatHeading(_engine.CurrentChatTitle, count);
+    }
 
     private UpdateInfo? _pendingUpdate;
 

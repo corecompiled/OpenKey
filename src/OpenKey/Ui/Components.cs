@@ -45,6 +45,18 @@ internal static class Components
         AnsiConsole.WriteLine();
     }
 
+    /// <summary>
+    /// Names the conversation you are in. With one conversation this was unnecessary; with several
+    /// it is the only way to tell them apart without typing /chats.
+    /// </summary>
+    public static void ChatHeading(string title, int messageCount)
+    {
+        AnsiConsole.MarkupLine(
+            $"[{Theme.BrandStrong}]{Markup.Escape(title)}[/]"
+            + (messageCount > 0 ? $"  [{Theme.Muted}]{Glyphs.Sep}  {messageCount} messages[/]" : string.Empty));
+        AnsiConsole.WriteLine();
+    }
+
     /// <summary>The only thing that clears the screen.</summary>
     public static void HomeHeader()
     {
@@ -65,7 +77,8 @@ internal static class Components
             "Type a message and press Enter to chat.\n" +
             "\n" +
             $"[{Theme.Brand}]/models[/]   Choose which AI model answers you\n" +
-            $"[{Theme.Brand}]/new[/]      Start a fresh conversation\n" +
+            $"[{Theme.Brand}]/new[/]      Start another chat, keeping this one\n" +
+            $"[{Theme.Brand}]/chats[/]    Switch between your saved chats\n" +
             $"[{Theme.Brand}]/help[/]     See everything OpenKey can do\n" +
             $"[{Theme.Brand}]/quit[/]     Close OpenKey");
 
