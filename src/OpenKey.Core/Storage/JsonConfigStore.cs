@@ -81,6 +81,6 @@ public sealed class JsonConfigStore : IConfigStore
             ? config.MaxTokens
             : OpenKeyConfig.DefaultMaxTokens;
 
-        return new OpenKeyConfig(models, theme, maxTokens);
+        return new OpenKeyConfig(models, theme, maxTokens, config.CheckForUpdates);
     }
 }

@@ -4,6 +4,7 @@ using OpenKey.Core.AppPaths;
 using OpenKey.Core.Engine;
 using OpenKey.Core.Providers;
 using OpenKey.Core.Storage;
+using OpenKey.Core.Updates;
 using OpenKey.Windows;
 using OpenKey.Windows.OAuth;
 using OpenKey.Providers.OpenRouter;
@@ -26,6 +27,7 @@ public sealed class ConsoleHost
     private readonly IRotationPolicy _rotation;
     private readonly ChatEngine _engine;
     private readonly IConfigStore _config;
+    private readonly IUpdateChecker _updates;
     private readonly HttpClient _http;
 
     private CommandRouter _commands = default!;
@@ -44,6 +46,7 @@ public sealed class ConsoleHost
         IRotationPolicy rotation,
         ChatEngine engine,
         IConfigStore config,
+        IUpdateChecker updates,
         HttpClient http)
     {
         _paths = paths;
@@ -53,6 +56,7 @@ public sealed class ConsoleHost
         _rotation = rotation;
         _engine = engine;
         _config = config;
+        _updates = updates;
         _http = http;
     }
 
@@ -94,6 +98,10 @@ public sealed class ConsoleHost
         await _engine.ResumeAsync(CancellationToken.None);
         ShowResumeRecapIfAny();
 
+        // Deliberately not awaited: an update check must never stand between launching and typing.
+        // It prints only if it finds something, and only between turns.
+        _ = CheckForUpdateAsync();
+
         while (!_exiting)
         {
             string? line;
@@ -109,6 +117,8 @@ public sealed class ConsoleHost
             if (line is null) break;                       // EOF / Ctrl+D
             if (_exiting) break;
             if (string.IsNullOrWhiteSpace(line)) continue;
+
+            ShowUpdateNoticeIfAny();
 
             var result = await _commands.HandleAsync(line, CancellationToken.None);
             if (result == CommandResult.Exit) break;
@@ -282,6 +292,31 @@ public sealed class ConsoleHost
     }
 
     private static void ClearAndShowChatHeader() => Components.HomeHeader();
+
+    private UpdateInfo? _pendingUpdate;
+
+    private async Task CheckForUpdateAsync()
+    {
+        if (!_config.Current.CheckForUpdates) return;
+
+        var found = await _updates.CheckAsync(Components.Version, CancellationToken.None);
+        if (found is not null) _pendingUpdate = found;
+    }
+
+    /// <summary>
+    /// Shown once, at the prompt, never mid-reply. A new version is worth mentioning; it is not
+    /// worth interrupting anything for.
+    /// </summary>
+    private void ShowUpdateNoticeIfAny()
+    {
+        if (_pendingUpdate is not { } update) return;
+        _pendingUpdate = null;
+
+        AnsiConsole.WriteLine();
+        AnsiConsole.MarkupLine(
+            $"[{Theme.Muted}]OpenKey {Markup.Escape(update.Version)} is available.[/] {Markup.Escape(update.Url)}");
+        Components.HintLine("Nothing is downloaded automatically. Turn this off with checkForUpdates in config.json.");
+    }
 
     /// <summary>
     /// Past turns are rendered entirely grey and indented, so the resumed history reads as inert

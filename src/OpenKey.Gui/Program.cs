@@ -4,6 +4,7 @@ using OpenKey.Core.AppPaths;
 using OpenKey.Core.Engine;
 using OpenKey.Core.Providers;
 using OpenKey.Core.Storage;
+using OpenKey.Core.Updates;
 using OpenKey.Gui.ViewModels;
 using OpenKey.Providers.OpenRouter;
 using OpenKey.Windows;
@@ -28,6 +29,8 @@ internal static class Program
         services.AddSingleton<IKeyStore, DpapiKeyStore>();
         services.AddSingleton<ISessionStore, JsonSessionStore>();
         services.AddSingleton<IConfigStore, JsonConfigStore>();
+        services.AddSingleton<IUpdateChecker, GitHubUpdateChecker>();
+services.AddSingleton<IUpdateChecker, GitHubUpdateChecker>();
         services.AddSingleton<IRotationPolicy, RotationPolicy>();
         services.AddSingleton<ITokenCounter, TiktokenCounter>();
 

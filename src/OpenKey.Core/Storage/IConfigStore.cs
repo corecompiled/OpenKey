@@ -10,16 +10,22 @@ namespace OpenKey.Core.Storage;
 /// </param>
 /// <param name="Theme">Palette name: <c>default</c>, <c>dark</c>, <c>light</c>, or <c>mono</c>.</param>
 /// <param name="MaxTokens">Upper bound on reply length requested from the model.</param>
+/// <param name="CheckForUpdates">
+/// Whether to ask GitHub once at launch if a newer release exists. Notify only — nothing is ever
+/// downloaded or installed automatically. This is the only request OpenKey makes to anywhere other
+/// than OpenRouter, so it is declared here and can be switched off.
+/// </param>
 public sealed record OpenKeyConfig(
     IReadOnlyList<string> PreferredModels,
     string Theme,
-    int MaxTokens)
+    int MaxTokens,
+    bool CheckForUpdates = true)
 {
     public const string DefaultTheme = "default";
     public const int DefaultMaxTokens = 2048;
 
     public static OpenKeyConfig Default { get; } =
-        new(Array.Empty<string>(), DefaultTheme, DefaultMaxTokens);
+        new(Array.Empty<string>(), DefaultTheme, DefaultMaxTokens, CheckForUpdates: true);
 
     /// <summary>
     /// The pinned model, or null when rotation is free to choose. A view over

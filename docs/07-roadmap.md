@@ -48,7 +48,11 @@ Features that touch storage or DI but stay backward-compatible.
 
 - **Token counter** — estimate tokens per turn and show running total in status line. Use a real tokenizer NuGet (e.g., `Tiktoken` for OpenAI-family models, `MicrosoftDeepDev.Tokenizer` for cross-model).
 - **`/config`** — interactive Spectre menu to edit `config.json` (preferred model order, max_tokens, theme).
-- **Update checker** — on launch, query `https://api.github.com/repos/corecompiled/OpenKey/releases/latest`. If newer, Spectre yellow notice with download URL. **Do not auto-download.**
+- ~~**Update checker**~~ — done. Grey rather than yellow: a version being available is
+  information, not a warning. Shown at the prompt rather than mid-reply, and switchable off via
+  `checkForUpdates` in `config.json` — it is the only request OpenKey makes outside OpenRouter, so
+  it is declared in [`../SECURITY.md`](../SECURITY.md) rather than left implicit. Still never
+  downloads anything.
 - **Theme toggle** — `/theme dark|light|mono`. Stored in `config.json`. Spectre styles parameterized.
 - **Multi-key support**:
   - `/key add <name>` — add another OpenRouter key under a label

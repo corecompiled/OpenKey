@@ -6,6 +6,7 @@ using OpenKey.Windows;
 using OpenKey.Core.Engine;
 using OpenKey.Core.Providers;
 using OpenKey.Core.Storage;
+using OpenKey.Core.Updates;
 using OpenKey.Providers.OpenRouter;
 
 // LLM replies contain non-ASCII (em-dash, smart quotes, emoji). Without UTF-8 the
@@ -33,6 +34,7 @@ services.AddSingleton<IChatProvider>(sp =>
 
 services.AddSingleton<IModelCatalog, JsonModelCatalog>();
 services.AddSingleton<IConfigStore, JsonConfigStore>();
+services.AddSingleton<IUpdateChecker, GitHubUpdateChecker>();
 services.AddSingleton<ITokenCounter, TiktokenCounter>();
 services.AddSingleton<ChatEngine>();
 services.AddSingleton<ConsoleHost>();

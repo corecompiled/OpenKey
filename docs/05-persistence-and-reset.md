@@ -132,9 +132,15 @@ See `04-model-rotation.md` § "Persistence of rotation state".
 {
   "preferredModels": [],
   "theme": "default",
-  "maxTokens": 2048
+  "maxTokens": 2048,
+  "checkForUpdates": true
 }
 ```
+
+`checkForUpdates` governs the single request to `api.github.com` made at launch to see whether a
+newer release exists. Notify only — nothing is downloaded or installed automatically, in any phase.
+Set it to `false` and OpenKey talks to OpenRouter and nowhere else. See
+[`../SECURITY.md`](../SECURITY.md).
 
 If absent, defaults apply (empty list means rotation chooses freely).
 
