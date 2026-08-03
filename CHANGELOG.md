@@ -5,16 +5,17 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.1] — 2026-08-03
+
+Two defects that shipped in 0.2.0, both found by using the app rather than reading it — plus a
+much smaller, faster binary.
+
 ### Changed
 
 - OpenKey is now a native binary: **11 MB instead of 43 MB**, starting in about a sixth of a
   second, with nothing unpacked to a temporary folder the first time you run it. All three matter
   most on a USB stick or someone else's machine.
 - Installable with [Scoop](https://scoop.sh), which also avoids the "unrecognized app" prompt.
-
-## [0.2.1] — 2026-08-03
-
-Two defects that shipped in 0.2.0, both found by using the app rather than reading it.
 
 ### Fixed
 
