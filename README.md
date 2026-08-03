@@ -29,8 +29,15 @@ Patron ❯
 
 ## Get it
 
-Download `OpenKey.exe` from [Releases](https://github.com/corecompiled/OpenKey/releases) and
-double-click it. One 11 MB file, nothing installed, runs from a USB stick.
+Two ways to use it, same chat and same saved conversation underneath:
+
+| | |
+|---|---|
+| **`OpenKeyApp.exe`** | A normal window. Start here if you're not sure. |
+| **`OpenKey.exe`** | The terminal version, if that's where you live. |
+
+Download either from [Releases](https://github.com/corecompiled/OpenKey/releases) and double-click.
+Around 11–30 MB, nothing installed, runs from a USB stick.
 
 Or via [Scoop](https://scoop.sh), which also avoids the SmartScreen prompt:
 

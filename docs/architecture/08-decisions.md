@@ -155,6 +155,43 @@ as commands.
 
 ---
 
+## A hand-written syntax highlighter, not AvaloniaEdit
+
+**Status:** decided
+
+The GUI colours code blocks in replies. The obvious options were AvaloniaEdit or a TextMate grammar
+engine, and both were rejected: they are built for *editing* — buffers, folding, undo, grammar
+files, incremental re-lex — and a chat reply is displayed once and never modified.
+
+The asymmetry decides it. Getting a keyword colour wrong is invisible to most readers and harmless
+to all of them. Taking the dependency costs megabytes in a binary whose whole pitch is that it is
+11 MB, plus an AOT compatibility risk in a build that is now fully native.
+
+`SyntaxHighlighter` is one regex per dialect family (C-style, hash-comment, SQL) and three keyword
+sets. Comments and strings match first, because a keyword inside a comment is not a keyword. An
+unknown language renders plain rather than guessing.
+
+The invariant that actually matters is tested: concatenating the tokens must reproduce the source
+exactly. Highlighting is a view over the text, and a dropped character would silently corrupt code
+the user is about to copy.
+
+## A second host, not a second implementation
+
+**Status:** decided
+
+`OpenKey.Gui` contains view models and views and nothing else — no chat logic, no rotation, no
+persistence, no provider code. Composition in its `Program.cs` is line-for-line the console's.
+
+This was the test of whether the layering was real. It held: the GUI needed no change to
+`OpenKey.Core` at all. The one thing it did force was extracting `OpenKey.Windows` — DPAPI, app
+paths, OAuth and the tokenizer had been sitting inside the console executable where a second host
+could not reach them.
+
+The GUI keeps the console's behavioural rules rather than inventing its own: block-level streaming,
+`IsAttemptRestart` clearing an abandoned reply, errors that name a next step, destructive confirms
+that default to Cancel. Themes are shared through `config.json`, so switching in one host and
+opening the other keeps the choice — the *setting* is shared, the *rendering* is per-host.
+
 ## The multi-provider seam is designed but unproven
 
 **Status:** acknowledged

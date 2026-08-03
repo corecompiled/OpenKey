@@ -68,21 +68,29 @@ Features that touch storage or DI but stay backward-compatible.
 - Why not WinUI 3: more setup friction (project templates change frequently in 2025/2026), packaging awkwardness.
 - Why not Electron/web tech: defeats the lightweight portable-exe ethos.
 
-**Project layout addition:**
+**Project layout as built:**
 
 ```
 src\OpenKey.Gui\
-    OpenKey.Gui.csproj          (Sdk: Microsoft.NET.Sdk; AvaloniaUseCompiledBindingsByDefault=true)
-    App.axaml                    Avalonia app shell
-    MainWindow.axaml             chat surface
-    ViewModels\ChatViewModel.cs  binds to OpenKey.Core.ChatEngine
+    App.axaml / GuiTheme.cs      app shell and palettes
+    Views\MainWindow.axaml       chat surface
+    Views\CodeBlockView.axaml    highlighted code with a copy button
+    Views\ConfirmWindow.axaml    destructive confirms and About
+    ViewModels\                  MainWindowViewModel, MessageViewModel,
+                                 MarkdownBlock, SyntaxHighlighter
+src\OpenKey.Windows\             DPAPI, app paths, OAuth, tokenizer —
+                                 shared by both hosts
 ```
+
+`OpenKey.Windows` was extracted when the GUI needed the same platform pieces the console already had. `OpenKey.Core` still has zero package references and still targets `net10.0` rather than `net10.0-windows`.
 
 **Key reuse principle:** `OpenKey.Core` and `OpenKey.Providers.OpenRouter` are referenced unchanged. `ChatEngine` is the boundary — the GUI binds an `IAsyncEnumerable<ChatChunk>` to a `TextBox`/`ItemsControl` exactly as the console renders it.
 
-**New publish target:** Avalonia can also publish single-file self-contained. Same flags as Phase 1's `dotnet publish` line, swap project path to `src/OpenKey.Gui/OpenKey.Gui.csproj`. Output size: ~50–80 MB.
+**Publish target:** `src/OpenKey.Gui/OpenKey.Gui.csproj`, NativeAOT like the console, shipping as `OpenKeyApp.exe` beside `OpenKey.exe` from the same tag.
 
-**Phase 2 ships when:** GUI feature-parity with Phase 1.2 console + GUI-specific QoL (mouse selection, copy code blocks, syntax highlighting via Avalonia.HtmlRenderer or Markdig + AvaloniaEdit).
+**Shipped.** Parity with the console feature set — new chat, retry, copy, export, model picker, theme, about, erase — plus the three GUI-specific items: mouse selection via `SelectableTextBlock`, a copy button on every code block, and syntax highlighting.
+
+Highlighting is a small in-house tokenizer rather than AvaloniaEdit or a TextMate grammar engine. Those are built for *editing* — buffers, folding, undo, grammar files — and none of that applies to text displayed once and never modified. A keyword in the wrong colour costs nothing; the dependency costs megabytes and an AOT risk. Recorded in [`architecture/08-decisions.md`](architecture/08-decisions.md).
 
 ## Phase 3 — Tool use / function calling
 

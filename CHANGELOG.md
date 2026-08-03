@@ -5,6 +5,15 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **A windowed app.** `OpenKeyApp.exe` ships alongside the console from the same release: the same
+  chat, the same models, the same saved conversation, in a normal window. Code blocks are syntax
+  highlighted and have their own copy button, text is selectable with the mouse, and there are
+  buttons for new chat, retry, copy, export, model choice, theme and about.
+- Four colour themes in both surfaces — default, dark, light and mono — remembered between runs and
+  shared between the console and the app.
+
 ## [0.2.1] — 2026-08-03
 
 Two defects that shipped in 0.2.0, both found by using the app rather than reading it — plus a

@@ -31,15 +31,19 @@ jobs:
       - name: Test
         run: dotnet test --no-build -c Release --verbosity normal
 
-      # Proves the publish profile in OpenKey.csproj still produces the shipping artifact
-      # without anyone pasting flags from a README.
-      - name: Verify single-file publish
-        run: dotnet publish src/OpenKey/OpenKey.csproj -c Release -r win-x64 -o publish-check
+      # Proves the publish profile in each csproj still produces the shipping artifact without
+      # anyone pasting flags from a README.
+      - name: Verify console publish
+        run: dotnet publish src/OpenKey/OpenKey.csproj -c Release -r win-x64 -o publish-check/console
 
-      - name: Confirm the exe exists
+      - name: Verify app publish
+        run: dotnet publish src/OpenKey.Gui/OpenKey.Gui.csproj -c Release -r win-x64 -o publish-check/app
+
+      - name: Confirm both binaries exist
         shell: pwsh
         run: |
-          $exe = "publish-check/OpenKey.exe"
-          if (-not (Test-Path $exe)) { throw "Expected $exe to exist" }
-          $mb = [math]::Round((Get-Item $exe).Length / 1MB, 1)
-          Write-Host "OpenKey.exe is $mb MB"
+          foreach ($p in @("publish-check/console/OpenKey.exe", "publish-check/app/OpenKeyApp.exe")) {
+            if (-not (Test-Path $p)) { throw "Expected $p to exist" }
+            $mb = [math]::Round((Get-Item $p).Length / 1MB, 1)
+            Write-Host "$p is $mb MB"
+          }

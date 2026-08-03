@@ -28,11 +28,17 @@ jobs:
       - name: Publish ${{ matrix.rid }}
         run: dotnet publish src/OpenKey/OpenKey.csproj -c Release -r ${{ matrix.rid }} -o out/${{ matrix.rid }}
 
-      - name: Name the artifact by platform
+      # Both surfaces ship from the same tag: the console for people who live in a terminal,
+      # the windowed app for everyone else. Same engine underneath.
+      - name: Publish the app ${{ matrix.rid }}
+        run: dotnet publish src/OpenKey.Gui/OpenKey.Gui.csproj -c Release -r ${{ matrix.rid }} -o out-app/${{ matrix.rid }}
+
+      - name: Name the artifacts by platform
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force dist | Out-Null
           Copy-Item "out/${{ matrix.rid }}/OpenKey.exe" "dist/OpenKey-${{ matrix.rid }}.exe"
+          Copy-Item "out-app/${{ matrix.rid }}/OpenKeyApp.exe" "dist/OpenKeyApp-${{ matrix.rid }}.exe"
 
       # Code signing removes the SmartScreen "unrecognized app" warning, which is the biggest
       # friction point for a product handed over on a USB stick. Disabled until the secrets exist;
@@ -58,9 +64,12 @@ jobs:
       - name: Checksum
         shell: pwsh
         run: |
-          $h = (Get-FileHash "dist/OpenKey-${{ matrix.rid }}.exe" -Algorithm SHA256).Hash.ToLower()
-          "$h  OpenKey-${{ matrix.rid }}.exe" | Out-File -Encoding ascii "dist/${{ matrix.rid }}.sha256"
-          Write-Host "$h  OpenKey-${{ matrix.rid }}.exe"
+          Remove-Item "dist/*.sha256" -ErrorAction SilentlyContinue
+          Get-ChildItem dist -Filter *.exe | ForEach-Object {
+            $h = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower()
+            "$h  $($_.Name)" | Out-File -Encoding ascii -Append "dist/${{ matrix.rid }}.sha256"
+            Write-Host "$h  $($_.Name)"
+          }
 
       - uses: actions/upload-artifact@v4
         with:

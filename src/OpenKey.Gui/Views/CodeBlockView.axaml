@@ -1,0 +1,37 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:OpenKey.Gui.ViewModels"
+             x:Class="OpenKey.Gui.Views.CodeBlockView"
+             x:DataType="vm:MarkdownBlock">
+
+  <Border Background="{DynamicResource CodeSurface}"
+          BorderBrush="{DynamicResource Line}"
+          BorderThickness="1" CornerRadius="6">
+    <Grid RowDefinitions="Auto,*">
+
+      <!-- Language label and copy button share a row so the button never overlaps code. -->
+      <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="12,7,7,0">
+        <TextBlock Grid.Column="0" Name="LanguageLabel"
+                   FontSize="11" VerticalAlignment="Center"
+                   Foreground="{DynamicResource Muted}" />
+        <Button Grid.Column="1" Name="CopyButton" Click="OnCopy"
+                Padding="8,3" FontSize="11" CornerRadius="4"
+                Background="Transparent"
+                Foreground="{DynamicResource Muted}"
+                Content="Copy"
+                ToolTip.Tip="Copy this code block" />
+      </Grid>
+
+      <!-- Selectable so a mouse drag works even without the button. -->
+      <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Auto"
+                    VerticalScrollBarVisibility="Disabled"
+                    Padding="12,4,12,10">
+        <SelectableTextBlock Name="CodeText"
+                             FontFamily="Cascadia Mono,Consolas,Courier New,monospace"
+                             FontSize="13"
+                             TextWrapping="NoWrap"
+                             Foreground="{DynamicResource Body}" />
+      </ScrollViewer>
+    </Grid>
+  </Border>
+</UserControl>

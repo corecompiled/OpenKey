@@ -317,6 +317,88 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public void Stop() => Volatile.Read(ref _turnCts)?.Cancel();
 
+    /// <summary>Resends the last message. Goes through SendAsync so a retry takes the same path.</summary>
+    public async Task RetryAsync()
+    {
+        if (IsBusy) return;
+
+        if (_engine.LastUserMessage is not { } last)
+        {
+            Show(StatusKind.Info, "Nothing to retry yet — send a message first.");
+            return;
+        }
+
+        Draft = last;
+        await SendAsync();
+    }
+
+    public string? LastReply =>
+        Messages.LastOrDefault(m => m.Speaker == Speaker.Assistant && m.HasText)?.Text;
+
+    /// <summary>
+    /// Renders the conversation as markdown, matching the console's <c>/export</c>. Returns null
+    /// when there is nothing to write.
+    /// </summary>
+    public string? BuildExport()
+    {
+        var turns = Messages.Where(m => m.HasText).ToList();
+        if (turns.Count == 0) return null;
+
+        var culture = System.Globalization.CultureInfo.InvariantCulture;
+        var sb = new System.Text.StringBuilder();
+
+        sb.AppendLine("# OpenKey conversation").AppendLine();
+        sb.Append(culture, $"Exported {DateTimeOffset.Now:yyyy-MM-dd HH:mm}").AppendLine();
+        if (_engine.ActiveModel is { } m) sb.Append(culture, $"Model: {m.Id}").AppendLine();
+        sb.AppendLine();
+
+        foreach (var turn in turns)
+        {
+            var who = turn.IsFromUser ? "You" : "OpenKey AI";
+            sb.Append(culture, $"## {who}").AppendLine().AppendLine();
+            sb.AppendLine(turn.Text.TrimEnd()).AppendLine();
+        }
+
+        return sb.ToString();
+    }
+
+    public static string SuggestedExportName =>
+        $"OpenKey-chat-{DateTimeOffset.Now:yyyy-MM-dd-HHmm}.md";
+
+    // ---- theme ---------------------------------------------------------------------------
+
+    /// <summary>Raised when the palette changes so the app can repaint. See GuiTheme.</summary>
+    public event Action<string>? ThemeChanged;
+
+    public string Theme => _config.Current.Theme;
+
+    public IReadOnlyList<string> Themes { get; } = new[] { "default", "dark", "light", "mono" };
+
+    public void SetTheme(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return;
+        var wanted = name.Trim().ToLowerInvariant();
+        if (wanted == _config.Current.Theme) return;
+
+        _config.Save(_config.Current with { Theme = wanted });
+        Raise(nameof(Theme));
+        ThemeChanged?.Invoke(wanted);
+    }
+
+    // ---- about ---------------------------------------------------------------------------
+
+    public IReadOnlyList<(string Label, string Value)> AboutRows => new[]
+    {
+        ("Version", Version),
+        ("Answering with", _engine.ActiveModel?.Id ?? "Nothing yet — send a message"),
+        ("Model choice", _engine.PreferredModelId ?? "Automatic"),
+        ("Your data", _paths.RootDir),
+        ("Key security", "Encrypted for your Windows account, stored on this PC only"),
+        ("Developer", "Paolo Patron"),
+    };
+
+    public void NotifyStatus(StatusKind kind, string message) => Show(kind, message);
+
     public async Task NewConversationAsync()
     {
         if (IsBusy) return;
