@@ -64,6 +64,22 @@ public sealed class CommandRouter
                 await StartNewConversationAsync(ct);
                 return CommandResult.Handled;
 
+            case "/chats":
+                await ShowChatsAsync(ct);
+                return CommandResult.Handled;
+
+            case "/chat":
+                await SwitchChatAsync(arg, ct);
+                return CommandResult.Handled;
+
+            case "/rename":
+                await RenameChatAsync(arg, ct);
+                return CommandResult.Handled;
+
+            case "/delete":
+                await DeleteChatAsync(arg, ct);
+                return CommandResult.Handled;
+
             case "/retry":
                 return Retry();
 
@@ -127,20 +143,145 @@ public sealed class CommandRouter
     }
 
     /// <summary>
-    /// Clears the conversation but keeps the key. Previously the only way to start fresh was
-    /// <c>/reset</c>, which also deleted the key and forced a new sign-in.
+    /// Starts a conversation alongside the existing ones. Nothing is destroyed — the previous chat
+    /// stays in <c>/chats</c>.
     /// </summary>
     private async Task StartNewConversationAsync(CancellationToken ct)
     {
         if (!_engine.Turns.Any(t => t.Role != ChatMessage.SystemRole))
         {
-            Components.HintLine("Already a fresh conversation.");
+            Components.HintLine("This chat is already empty.");
             return;
         }
 
         await _engine.NewSessionAsync(ct);
         _clearScreen();
-        Components.SuccessLine("Started a new conversation. Your key is untouched.");
+        Components.SuccessLine("Started a new chat. The previous one is in /chats.");
+    }
+
+    private async Task<IReadOnlyList<ChatSummary>> ShowChatsAsync(CancellationToken ct)
+    {
+        var chats = await _engine.ListChatsAsync(ct);
+        if (chats.Count == 0)
+        {
+            Components.HintLine("No saved chats yet.");
+            return chats;
+        }
+
+        var table = new Table()
+            .Border(Glyphs.Table)
+            .BorderColor(Color.Grey)
+            .Expand()
+            .AddColumn(new TableColumn($"[{Theme.Strong}]#[/]").Width(4))
+            .AddColumn(new TableColumn($"[{Theme.Strong}]Chat[/]"))
+            .AddColumn(new TableColumn($"[{Theme.Strong}]Messages[/]").Width(10))
+            .AddColumn(new TableColumn($"[{Theme.Strong}]Last used[/]").Width(16));
+
+        for (var i = 0; i < chats.Count; i++)
+        {
+            var c = chats[i];
+            var current = c.Id == _engine.CurrentChatId;
+            var style = current ? Theme.Brand : Theme.Strong;
+            table.AddRow(
+                $"[{Theme.Muted}]{i + 1}[/]",
+                $"[{style}]{Markup.Escape(c.Title)}[/]" + (current ? $" [{Theme.Muted}](open)[/]" : string.Empty),
+                $"[{Theme.Muted}]{c.MessageCount}[/]",
+                $"[{Theme.Muted}]{Markup.Escape(Ago(c.UpdatedAt))}[/]");
+        }
+
+        AnsiConsole.Write(table);
+        AnsiConsole.WriteLine();
+        Components.HintLine("Type /chat 2 to switch, /rename <name> for this one, /delete 2 to remove one.");
+        return chats;
+    }
+
+    private async Task SwitchChatAsync(string? arg, CancellationToken ct)
+    {
+        var chats = await ShowChatsAsync(ct);
+        if (chats.Count == 0) return;
+        if (string.IsNullOrWhiteSpace(arg)) return;
+
+        if (!TryResolve(arg, chats, out var chat))
+        {
+            Components.HintLine($"No chat {Markup.Escape(arg)}. Use a number from /chats.");
+            return;
+        }
+
+        if (await _engine.OpenChatAsync(chat.Id, ct))
+        {
+            _clearScreen();
+            Components.SuccessLine($"Opened \"{chat.Title}\".");
+        }
+        else
+        {
+            Components.HintLine("That chat could not be opened.");
+        }
+    }
+
+    private async Task RenameChatAsync(string? arg, CancellationToken ct)
+    {
+        if (_engine.CurrentChatId is not { } id)
+        {
+            Components.HintLine("Nothing to rename yet — send a message first.");
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(arg))
+        {
+            Components.HintLine("Give it a name, for example /rename Trip planning");
+            return;
+        }
+
+        await _engine.RenameChatAsync(id, arg, ct);
+        Components.SuccessLine($"Renamed to \"{arg.Trim()}\".");
+    }
+
+    private async Task DeleteChatAsync(string? arg, CancellationToken ct)
+    {
+        var chats = await _engine.ListChatsAsync(ct);
+        if (chats.Count == 0)
+        {
+            Components.HintLine("No saved chats yet.");
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(arg) || !TryResolve(arg, chats, out var chat))
+        {
+            Components.HintLine("Say which one, for example /delete 2. Use /chats to see the numbers.");
+            return;
+        }
+
+        if (!Prompts.Confirm($"Delete \"{chat.Title}\"? This can't be undone."))
+        {
+            Components.HintLine("Nothing was changed.");
+            return;
+        }
+
+        await _engine.DeleteChatAsync(chat.Id, ct);
+        Components.SuccessLine($"Deleted \"{chat.Title}\".");
+    }
+
+    private static bool TryResolve(string arg, IReadOnlyList<ChatSummary> chats, out ChatSummary chat)
+    {
+        if (int.TryParse(arg.Trim(), out var n) && n >= 1 && n <= chats.Count)
+        {
+            chat = chats[n - 1];
+            return true;
+        }
+
+        chat = default!;
+        return false;
+    }
+
+    /// <summary>Relative time reads faster than a timestamp when scanning a list.</summary>
+    private static string Ago(DateTimeOffset when)
+    {
+        var d = DateTimeOffset.UtcNow - when;
+        if (d < TimeSpan.FromMinutes(1)) return "just now";
+        if (d < TimeSpan.FromHours(1)) return $"{(int)d.TotalMinutes}m ago";
+        if (d < TimeSpan.FromDays(1)) return $"{(int)d.TotalHours}h ago";
+        if (d < TimeSpan.FromDays(30)) return $"{(int)d.TotalDays}d ago";
+        return when.LocalDateTime.ToString("d MMM yyyy", System.Globalization.CultureInfo.CurrentCulture);
     }
 
     private CommandResult Retry()
@@ -405,7 +546,11 @@ public sealed class CommandRouter
             table.AddRow($"[{Theme.Brand}]{cmd}[/]", what);
 
         table.AddRow($"[{Theme.Muted}]Chatting[/]", string.Empty);
-        Row("/new", "Start a fresh conversation, keeping your key");
+        Row("/new", "Start another chat, keeping this one");
+        Row("/chats", "List your saved chats");
+        Row("/chat", "Switch to another chat, e.g. /chat 2");
+        Row("/rename", "Rename this chat");
+        Row("/delete", "Delete a chat, e.g. /delete 2");
         Row("/retry", "Send your last message again");
         Row("/history", "Show the conversation so far");
         Row("/copy", "Copy the last reply to the clipboard");

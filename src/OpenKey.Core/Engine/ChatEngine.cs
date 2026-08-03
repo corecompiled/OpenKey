@@ -23,7 +23,7 @@ public sealed class ChatEngine
     private readonly IChatProvider _provider;
     private readonly IRotationPolicy _rotation;
     private readonly IModelCatalog _catalog;
-    private readonly ISessionStore _sessions;
+    private readonly IChatStore _chats;
     private readonly IConfigStore _config;
     private readonly ITokenCounter _tokens;
 
@@ -33,14 +33,14 @@ public sealed class ChatEngine
         IChatProvider provider,
         IRotationPolicy rotation,
         IModelCatalog catalog,
-        ISessionStore sessions,
+        IChatStore chats,
         IConfigStore config,
         ITokenCounter? tokens = null)
     {
         _provider = provider;
         _rotation = rotation;
         _catalog = catalog;
-        _sessions = sessions;
+        _chats = chats;
         _config = config;
         _tokens = tokens ?? new HeuristicTokenCounter();
         PreferredModelId = config.Current.PinnedModel;
@@ -72,25 +72,82 @@ public sealed class ChatEngine
 
     public async Task ResumeAsync(CancellationToken ct)
     {
-        var snap = await _sessions.LoadAsync(ct);
-        if (snap is null)
+        var id = await _chats.MostRecentIdAsync(ct);
+        if (id is null)
         {
-            ResetTurnsToSystemOnly();
+            StartNewChat();
             return;
         }
 
-        _turns.Clear();
-        _turns.AddRange(snap.Turns);
-        if (_turns.Count == 0 || _turns[0].Role != ChatMessage.SystemRole)
-            _turns.Insert(0, new ChatMessage(ChatMessage.SystemRole, DefaultSystemPrompt));
+        await OpenChatAsync(id, ct);
     }
 
+    /// <summary>
+    /// Starts a conversation without touching the previous one. It gets an id on first save, so an
+    /// empty chat nobody used never reaches disk.
+    /// </summary>
     public Task NewSessionAsync(CancellationToken ct)
     {
-        ResetTurnsToSystemOnly();
-        _sessions.Clear();
+        StartNewChat();
         return Task.CompletedTask;
     }
+
+    /// <summary>The conversation currently open, or null before anything has been said.</summary>
+    public string? CurrentChatId { get; private set; }
+
+    public string CurrentChatTitle { get; private set; } = Chat.Untitled;
+
+    public Task<IReadOnlyList<ChatSummary>> ListChatsAsync(CancellationToken ct) => _chats.ListAsync(ct);
+
+    public async Task<bool> OpenChatAsync(string id, CancellationToken ct)
+    {
+        var chat = await _chats.LoadAsync(id, ct);
+        if (chat is null) return false;
+
+        _turns.Clear();
+        _turns.AddRange(chat.Turns);
+        if (_turns.Count == 0 || _turns[0].Role != ChatMessage.SystemRole)
+            _turns.Insert(0, new ChatMessage(ChatMessage.SystemRole, DefaultSystemPrompt));
+
+        CurrentChatId = chat.Id;
+        CurrentChatTitle = chat.Title;
+        _createdAt = chat.CreatedAt;
+        return true;
+    }
+
+    public async Task DeleteChatAsync(string id, CancellationToken ct)
+    {
+        await _chats.DeleteAsync(id, ct);
+
+        // Deleting the chat you are looking at should leave you somewhere sensible, not staring at
+        // a conversation that no longer exists.
+        if (CurrentChatId != id) return;
+
+        var next = await _chats.MostRecentIdAsync(ct);
+        if (next is null || !await OpenChatAsync(next, ct)) StartNewChat();
+    }
+
+    public async Task RenameChatAsync(string id, string title, CancellationToken ct)
+    {
+        var chat = await _chats.LoadAsync(id, ct);
+        if (chat is null) return;
+
+        var clean = string.IsNullOrWhiteSpace(title) ? Chat.Untitled : title.Trim();
+        if (clean.Length > Chat.MaxTitleLength) clean = clean[..Chat.MaxTitleLength];
+
+        await _chats.SaveAsync(chat with { Title = clean }, ct);
+        if (CurrentChatId == id) CurrentChatTitle = clean;
+    }
+
+    private void StartNewChat()
+    {
+        ResetTurnsToSystemOnly();
+        CurrentChatId = null;
+        CurrentChatTitle = Chat.Untitled;
+        _createdAt = DateTimeOffset.UtcNow;
+    }
+
+    private DateTimeOffset _createdAt = DateTimeOffset.UtcNow;
 
     /// <summary>
     /// Puts a previous conversation back and re-persists it. Exists so a host can offer undo after
@@ -106,9 +163,8 @@ public sealed class ChatEngine
         if (_turns.Count == 0 || _turns[0].Role != ChatMessage.SystemRole)
             _turns.Insert(0, new ChatMessage(ChatMessage.SystemRole, DefaultSystemPrompt));
 
-        await _sessions.SaveAsync(
-            new SessionSnapshot(ActiveModel?.Id ?? string.Empty, DateTimeOffset.UtcNow, _turns.ToArray()),
-            ct);
+        CurrentChatId ??= IChatStore.NewId();
+        await PersistAsync(ActiveModel?.Id ?? string.Empty, ct);
     }
 
     public async IAsyncEnumerable<ChatChunk> SendAsync(
@@ -309,8 +365,20 @@ public sealed class ChatEngine
     {
         _rotation.MarkSuccess(model.Id);
         _turns.Add(new ChatMessage(ChatMessage.AssistantRole, assistantText));
-        await _sessions.SaveAsync(
-            new SessionSnapshot(model.Id, DateTimeOffset.UtcNow, _turns.ToArray()),
+        await PersistAsync(model.Id, ct);
+    }
+
+    /// <summary>
+    /// Writes the open conversation. The id and title are assigned on the first save, so a chat
+    /// only exists on disk once something was actually said in it.
+    /// </summary>
+    private async Task PersistAsync(string modelId, CancellationToken ct)
+    {
+        CurrentChatId ??= IChatStore.NewId();
+        if (CurrentChatTitle == Chat.Untitled) CurrentChatTitle = Chat.TitleFrom(_turns);
+
+        await _chats.SaveAsync(
+            new Chat(CurrentChatId, CurrentChatTitle, modelId, _createdAt, DateTimeOffset.UtcNow, _turns.ToArray()),
             ct);
     }
 

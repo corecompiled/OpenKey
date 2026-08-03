@@ -77,12 +77,12 @@ public sealed class ConfigStoreTests
 
         var first = new ChatEngine(
             provider, new RotationPolicy(paths), new JsonModelCatalog(paths, provider),
-            new JsonSessionStore(paths), new JsonConfigStore(paths));
+            new JsonChatStore(paths), new JsonConfigStore(paths));
         first.PreferredModelId = "vendor/pinned:free";
 
         var second = new ChatEngine(
             provider, new RotationPolicy(paths), new JsonModelCatalog(paths, provider),
-            new JsonSessionStore(paths), new JsonConfigStore(paths));
+            new JsonChatStore(paths), new JsonConfigStore(paths));
         await Task.CompletedTask;
 
         Assert.Equal("vendor/pinned:free", second.PreferredModelId);

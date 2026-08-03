@@ -26,7 +26,7 @@ public sealed class ChatEngineTests
         var provider = new FakeChatProvider { Models = models };
         var rotation = new RotationPolicy(paths);
         var catalog = new JsonModelCatalog(paths, provider);
-        var sessions = new JsonSessionStore(paths);
+        var sessions = new JsonChatStore(paths);
         var config = new JsonConfigStore(paths);
         var engine = new ChatEngine(provider, rotation, catalog, sessions, config);
         await engine.ResumeAsync(CancellationToken.None);
@@ -56,7 +56,7 @@ public sealed class ChatEngineTests
         Assert.Equal("Hello world", text);
         Assert.Equal(3, engine.Turns.Count);              // system + user + assistant
         Assert.Equal("Hello world", engine.Turns[^1].Content);
-        Assert.True(File.Exists(((IAppPaths)paths).SessionFile));   // default interface member
+        Assert.NotEmpty(Directory.GetFiles(Path.Combine(paths.RootDir, "chats"), "*.json"));
     }
 
     [Fact]
@@ -78,7 +78,7 @@ public sealed class ChatEngineTests
 
         Assert.Equal(3, engine.Turns.Count);                      // system + user + assistant
         Assert.Equal("persisted", engine.Turns[^1].Content);
-        Assert.True(File.Exists(((IAppPaths)paths).SessionFile));
+        Assert.NotEmpty(Directory.GetFiles(Path.Combine(paths.RootDir, "chats"), "*.json"));
     }
 
     [Fact]

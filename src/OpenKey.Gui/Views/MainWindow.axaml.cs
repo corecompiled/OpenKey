@@ -6,6 +6,7 @@ using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
 using OpenKey.Core.Providers;
+using OpenKey.Core.Storage;
 using OpenKey.Gui.ViewModels;
 
 namespace OpenKey.Gui.Views;
@@ -93,17 +94,39 @@ public partial class MainWindow : Window
 
     private void OnStop(object? sender, RoutedEventArgs e) => Vm.Stop();
 
-    private async void OnClearChat(object? sender, RoutedEventArgs e)
+    private async void OnNewChat(object? sender, RoutedEventArgs e)
     {
-        await Vm.ClearConversationAsync();
+        await Vm.NewChatAsync();
         ScrollToBottomSoon();
         FocusComposer();
     }
 
-    private async void OnUndoClear(object? sender, RoutedEventArgs e)
+    private void OnToggleChats(object? sender, RoutedEventArgs e) => Vm.ShowChats = !Vm.ShowChats;
+
+    private async void OnDeleteChat(object? sender, RoutedEventArgs e)
     {
-        await Vm.UndoClearAsync();
-        ScrollToBottomSoon();
+        if (sender is not MenuItem { DataContext: ChatSummary chat }) return;
+
+        // Deleting a conversation cannot be undone — there is nowhere to put it — so unlike
+        // starting a new chat this one asks first.
+        var confirm = new ConfirmWindow(
+            "Delete this chat?",
+            $"\"{chat.Title}\" will be permanently deleted from this PC.",
+            "Delete");
+
+        if (await confirm.ShowDialog<bool>(this)) await Vm.DeleteChatAsync(chat);
+    }
+
+    private async void OnRenameChat(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem { DataContext: ChatSummary chat }) return;
+
+        var dialog = new RenameWindow(chat.Title);
+        if (await dialog.ShowDialog<string?>(this) is { } title)
+        {
+            if (chat.Id != Vm.SelectedChat?.Id) await Vm.OpenChatAsync(chat.Id);
+            await Vm.RenameCurrentChatAsync(title);
+        }
     }
 
     private void OnThemeMenu(object? sender, RoutedEventArgs e)

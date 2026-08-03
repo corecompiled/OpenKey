@@ -1,0 +1,23 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="OpenKey.Gui.Views.RenameWindow"
+        Width="380" SizeToContent="Height"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        Background="{DynamicResource Surface}"
+        Title="Rename chat">
+
+  <Border Padding="20">
+    <StackPanel Spacing="12">
+      <TextBlock Text="Rename this chat" FontSize="15" FontWeight="Bold"
+                 Foreground="{DynamicResource Body}" />
+      <TextBox Name="TitleBox" MaxLength="48" />
+      <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+        <Button Content="Cancel" Click="OnCancel" Padding="14,7" />
+        <Button Content="Rename" Click="OnRename" Padding="14,7" IsDefault="True"
+                Background="{DynamicResource Brand}" Foreground="{DynamicResource OnBrand}" />
+      </StackPanel>
+    </StackPanel>
+  </Border>
+</Window>

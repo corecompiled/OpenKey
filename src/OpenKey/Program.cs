@@ -17,7 +17,7 @@ var services = new ServiceCollection();
 
 services.AddSingleton<IAppPaths, WindowsAppPaths>();
 services.AddSingleton<IKeyStore, DpapiKeyStore>();
-services.AddSingleton<ISessionStore, JsonSessionStore>();
+services.AddSingleton<IChatStore, JsonChatStore>();
 services.AddSingleton<IRotationPolicy, RotationPolicy>();
 
 // Infinite on purpose. HttpClient.Timeout bounds the *entire* response including reading the body,

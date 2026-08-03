@@ -54,7 +54,7 @@ public sealed class MainWindowViewModel : ObservableObject
         Messages.CollectionChanged += (_, _) => Raise(nameof(IsConversationEmpty));
 
         StopCommand = new RelayCommand(Stop);
-        ClearCommand = new RelayCommand(() => _ = ClearConversationAsync());
+        NewChatCommand = new RelayCommand(() => _ = NewChatAsync());
     }
 
     public ObservableCollection<MessageViewModel> Messages { get; } = new();
@@ -63,6 +63,34 @@ public sealed class MainWindowViewModel : ObservableObject
     public bool IsConversationEmpty => Messages.Count == 0;
 
     public ObservableCollection<ModelChoice> Models { get; } = new();
+
+    /// <summary>Saved conversations, newest first. Drives the sidebar.</summary>
+    public ObservableCollection<ChatSummary> Chats { get; } = new();
+
+    private ChatSummary? _selectedChat;
+
+    /// <summary>
+    /// The chat the sidebar highlights. Setting it opens that conversation; assigning the backing
+    /// field directly is how the code reflects a switch without re-triggering one.
+    /// </summary>
+    public ChatSummary? SelectedChat
+    {
+        get => _selectedChat;
+        set
+        {
+            if (!Set(ref _selectedChat, value) || value is null) return;
+            if (value.Id == _engine.CurrentChatId) return;
+            _ = OpenChatAsync(value.Id);
+        }
+    }
+
+    private bool _showChats = true;
+
+    public bool ShowChats
+    {
+        get => _showChats;
+        set => Set(ref _showChats, value);
+    }
 
     private ModelChoice? _selectedModel;
 
@@ -159,13 +187,8 @@ public sealed class MainWindowViewModel : ObservableObject
         NeedsKey = false;
         await _engine.ResumeAsync(CancellationToken.None);
 
-        foreach (var turn in _engine.Turns.Where(t => t.Role != ChatMessage.SystemRole))
-        {
-            Messages.Add(new MessageViewModel(
-                turn.Role == ChatMessage.UserRole ? Speaker.You : Speaker.Assistant,
-                turn.Content));
-        }
-
+        LoadMessagesFromEngine();
+        await RefreshChatsAsync();
         await LoadModelsAsync();
 
         // Not awaited: the window is usable immediately, and a new version is never urgent.
@@ -297,13 +320,6 @@ public sealed class MainWindowViewModel : ObservableObject
         Draft = string.Empty;
         Status = null;
 
-        if (_clearedTurns is not null)
-        {
-            _clearedTurns = null;
-            _clearedMessages = null;
-            Raise(nameof(CanUndoClear));
-        }
-
         Messages.Add(new MessageViewModel(Speaker.You, text));
 
         var reply = new MessageViewModel(Speaker.Assistant) { IsStreaming = true };
@@ -378,7 +394,7 @@ public sealed class MainWindowViewModel : ObservableObject
     // calls the methods directly.
     public System.Windows.Input.ICommand StopCommand { get; }
 
-    public System.Windows.Input.ICommand ClearCommand { get; }
+    public System.Windows.Input.ICommand NewChatCommand { get; }
 
     /// <summary>Resends the last message. Goes through SendAsync so a retry takes the same path.</summary>
     public async Task RetryAsync()
@@ -462,56 +478,81 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public void NotifyStatus(StatusKind kind, string message) => Show(kind, message);
 
-    private IReadOnlyList<ChatMessage>? _clearedTurns;
-    private MessageViewModel[]? _clearedMessages;
+    private void LoadMessagesFromEngine()
+    {
+        Messages.Clear();
+        foreach (var turn in _engine.Turns.Where(t => t.Role != ChatMessage.SystemRole))
+        {
+            Messages.Add(new MessageViewModel(
+                turn.Role == ChatMessage.UserRole ? Speaker.You : Speaker.Assistant,
+                turn.Content));
+        }
+    }
 
-    /// <summary>True while a cleared conversation can still be brought back.</summary>
-    public bool CanUndoClear => _clearedTurns is not null;
+    public async Task RefreshChatsAsync()
+    {
+        var chats = await _engine.ListChatsAsync(CancellationToken.None);
+
+        Chats.Clear();
+        foreach (var c in chats) Chats.Add(c);
+
+        // Assign the field, not the property: the setter opens a chat, and this is only
+        // reflecting which one is already open.
+        _selectedChat = chats.FirstOrDefault(c => c.Id == _engine.CurrentChatId);
+        Raise(nameof(SelectedChat));
+        Raise(nameof(HasChats));
+    }
+
+    public bool HasChats => Chats.Count > 0;
 
     /// <summary>
-    /// Clears the conversation, keeping the key.
-    /// <para>
-    /// This deletes the only conversation OpenKey stores, so it is offered with undo rather than
-    /// behind a confirmation. A dialog interrupts everyone every time to guard against a mistake
-    /// that is rare; undo costs nothing until the moment it is needed, and then it costs one
-    /// click. The button is also labelled "Clear chat" rather than "New chat" — the latter implies
-    /// the old conversation is still somewhere, and it is not.
-    /// </para>
+    /// Starts a conversation alongside the existing ones. Nothing is destroyed, which is why this
+    /// needs no confirmation and no undo — the previous chat is still in the sidebar.
     /// </summary>
-    public async Task ClearConversationAsync()
+    public async Task NewChatAsync()
     {
         if (IsBusy) return;
 
-        if (Messages.Count == 0)
+        await _engine.NewSessionAsync(CancellationToken.None);
+        Messages.Clear();
+        await RefreshChatsAsync();
+        Status = null;
+    }
+
+    public async Task OpenChatAsync(string id)
+    {
+        if (IsBusy) return;
+
+        if (!await _engine.OpenChatAsync(id, CancellationToken.None))
         {
-            Show(StatusKind.Info, "This chat is already empty.");
+            Show(StatusKind.Warn, "That chat couldn't be opened.");
             return;
         }
 
-        _clearedTurns = _engine.Turns.ToArray();
-        _clearedMessages = Messages.ToArray();
-
-        await _engine.NewSessionAsync(CancellationToken.None);
-        Messages.Clear();
-
-        Raise(nameof(CanUndoClear));
-        Show(StatusKind.Ok, "Chat cleared. Your key is untouched.");
+        LoadMessagesFromEngine();
+        await RefreshChatsAsync();
+        Status = null;
     }
 
-    public async Task UndoClearAsync()
+    public async Task DeleteChatAsync(ChatSummary chat)
     {
-        if (_clearedTurns is null || _clearedMessages is null) return;
+        if (IsBusy) return;
 
-        await _engine.RestoreTurnsAsync(_clearedTurns, CancellationToken.None);
-
-        Messages.Clear();
-        foreach (var m in _clearedMessages) Messages.Add(m);
-
-        _clearedTurns = null;
-        _clearedMessages = null;
-        Raise(nameof(CanUndoClear));
-        Show(StatusKind.Ok, "Chat restored.");
+        await _engine.DeleteChatAsync(chat.Id, CancellationToken.None);
+        LoadMessagesFromEngine();
+        await RefreshChatsAsync();
+        Show(StatusKind.Ok, $"Deleted \"{chat.Title}\".");
     }
+
+    public async Task RenameCurrentChatAsync(string title)
+    {
+        if (_engine.CurrentChatId is not { } id) return;
+
+        await _engine.RenameChatAsync(id, title, CancellationToken.None);
+        await RefreshChatsAsync();
+    }
+
+    public string CurrentChatTitle => _engine.CurrentChatTitle;
 
     public void PinModel(ModelInfo? model)
     {

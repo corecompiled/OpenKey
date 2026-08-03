@@ -22,7 +22,7 @@ public sealed class ConsoleHost
 
     private readonly IAppPaths _paths;
     private readonly IKeyStore _keyStore;
-    private readonly ISessionStore _sessions;
+    private readonly IChatStore _chats;
     private readonly IModelCatalog _catalog;
     private readonly IRotationPolicy _rotation;
     private readonly ChatEngine _engine;
@@ -41,7 +41,7 @@ public sealed class ConsoleHost
     public ConsoleHost(
         IAppPaths paths,
         IKeyStore keyStore,
-        ISessionStore sessions,
+        IChatStore chats,
         IModelCatalog catalog,
         IRotationPolicy rotation,
         ChatEngine engine,
@@ -51,7 +51,7 @@ public sealed class ConsoleHost
     {
         _paths = paths;
         _keyStore = keyStore;
-        _sessions = sessions;
+        _chats = chats;
         _catalog = catalog;
         _rotation = rotation;
         _engine = engine;

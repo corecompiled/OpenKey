@@ -27,7 +27,7 @@ internal static class Program
 
         services.AddSingleton<IAppPaths, WindowsAppPaths>();
         services.AddSingleton<IKeyStore, DpapiKeyStore>();
-        services.AddSingleton<ISessionStore, JsonSessionStore>();
+        services.AddSingleton<IChatStore, JsonChatStore>();
         services.AddSingleton<IConfigStore, JsonConfigStore>();
         services.AddSingleton<IUpdateChecker, GitHubUpdateChecker>();
 services.AddSingleton<IUpdateChecker, GitHubUpdateChecker>();
