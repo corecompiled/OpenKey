@@ -9,11 +9,12 @@
         x:DataType="vm:MainWindowViewModel"
         Title="OpenKey"
         Width="900" Height="680"
-        MinWidth="560" MinHeight="420"
+        MinWidth="640" MinHeight="420"
         Background="{DynamicResource Surface}">
 
   <Window.Resources>
     <conv:StatusBrushConverter x:Key="StatusBrush" />
+    <conv:StatusSurfaceConverter x:Key="StatusSurface" />
   </Window.Resources>
 
   <!-- Window-level so they work wherever focus happens to be. Escape stopping a reply matters
@@ -23,47 +24,333 @@
     <KeyBinding Gesture="Ctrl+N" Command="{Binding NewChatCommand}" />
   </Window.KeyBindings>
 
-  <Window.Styles>
-    <Style Selector="Button.primary">
-      <Setter Property="Background" Value="{DynamicResource Brand}" />
-      <Setter Property="Foreground" Value="{DynamicResource OnBrand}" />
-      <Setter Property="FontWeight" Value="SemiBold" />
-      <Setter Property="Padding" Value="16,8" />
-      <Setter Property="CornerRadius" Value="6" />
-    </Style>
-    <Style Selector="Button.ghost">
-      <Setter Property="Background" Value="Transparent" />
-      <Setter Property="Foreground" Value="{DynamicResource Muted}" />
-      <Setter Property="Padding" Value="10,6" />
-      <Setter Property="CornerRadius" Value="6" />
-    </Style>
-    <Style Selector="Button.ghost:pointerover /template/ ContentPresenter">
-      <Setter Property="Background" Value="{DynamicResource SurfaceRaised}" />
-    </Style>
-  </Window.Styles>
+  <!-- Control styles live in Styles/Controls.axaml at application scope, so the dialogs get
+       them too. Nothing control-specific belongs here. -->
 
-  <Grid RowDefinitions="Auto,*,Auto">
+  <Grid RowDefinitions="Auto,*">
 
-    <!-- Header -->
-    <Border Grid.Row="0" Background="{DynamicResource SurfaceRaised}" Padding="16,10"
+    <!-- Header. Chrome recedes: sunken, not raised. -->
+    <Border Grid.Row="0" Background="{DynamicResource SurfaceSunken}" Padding="12,8"
             BorderBrush="{DynamicResource Line}" BorderThickness="0,0,0,1">
       <Grid ColumnDefinitions="Auto,*,Auto">
-        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-          <Button Classes="ghost" Content="&#x2630;" FontSize="14" Padding="8,2"
+        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+          <Button Classes="icon" Content="&#x2630;"
                   Click="OnToggleChats" ToolTip.Tip="Show or hide your chats" />
-          <TextBlock Text="OpenKey" FontSize="16" FontWeight="Bold"
+
+          <!-- 18px against a 16px SemiBold wordmark: a mark sits between cap height and
+               ascender, never flush with cap height. The 6px gap is narrower than the header's
+               usual 8 because the mark's right edge is a near-point, and optical spacing
+               against a pointed form needs less than against a flat one. -->
+          <views:Brandmark Width="18" Height="18" Margin="4,0,6,0" VerticalAlignment="Center" />
+          <TextBlock Text="OpenKey" FontSize="16" FontWeight="SemiBold"
                      Foreground="{DynamicResource Brand}" VerticalAlignment="Center" />
-          <TextBlock Text="{Binding Version, StringFormat='v{0}'}" FontSize="12"
+          <TextBlock Text="{Binding Version, StringFormat='v{0}'}" FontSize="12" Margin="2,0,0,0"
                      Foreground="{DynamicResource Muted}" VerticalAlignment="Center" />
         </StackPanel>
 
-        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" IsVisible="{Binding IsReady}">
+        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2" IsVisible="{Binding IsReady}">
 
-          <!-- Conversation actions only. Settings live behind the menu at the end, so a per-app
-               preference is never wedged between per-conversation verbs. -->
-          <ComboBox ItemsSource="{Binding Models}"
+          <!-- New chat lives at the head of the chat list, where the thing it creates appears.
+               This is its stand-in for when that list is hidden: the two are mutually exclusive,
+               so there is never a second copy on screen and never none, and Ctrl+N always has a
+               visible affordance. -->
+          <Button Classes="ghost" Content="New chat" Click="OnNewChat"
+                  IsVisible="{Binding !ShowChats}"
+                  ToolTip.Tip="Start another chat, keeping this one (Ctrl+N)" />
+
+          <!-- The last conversation-level verb left up here. Retry and Copy moved into the
+               transcript because they act on one message, and the model picker moved to the
+               composer because it is an input to the next send, not a toolbar setting. -->
+          <Button Classes="ghost" Content="Export" Click="OnExport"
+                  ToolTip.Tip="Save this conversation as a markdown file" />
+
+          <Button Classes="icon" Content="&#x22EF;" Margin="4,0,0,0"
+                  ToolTip.Tip="Settings">
+            <Button.Flyout>
+              <MenuFlyout Placement="BottomEdgeAlignedRight">
+                <MenuItem Header="Theme">
+                  <MenuItem Header="Default" Click="OnThemeMenu" Tag="default" />
+                  <MenuItem Header="Dark" Click="OnThemeMenu" Tag="dark" />
+                  <MenuItem Header="Light" Click="OnThemeMenu" Tag="light" />
+                  <MenuItem Header="Mono" Click="OnThemeMenu" Tag="mono" />
+                </MenuItem>
+                <MenuItem Header="Your name…" Click="OnChangeName" />
+                <Separator />
+                <MenuItem Header="About OpenKey" Click="OnAbout" />
+                <Separator />
+                <!-- Destructive, so it sits alone at the bottom behind a menu, where it cannot be
+                     hit while reaching for Export. -->
+                <MenuItem Header="Erase everything…" Classes="destructive" Click="OnResetClicked" />
+              </MenuFlyout>
+            </Button.Flyout>
+          </Button>
+        </StackPanel>
+      </Grid>
+    </Border>
+
+    <!-- Body: sign-in or conversation -->
+    <Panel Grid.Row="1">
+
+      <!-- First run -->
+      <Border IsVisible="{Binding NeedsKey}" Padding="32" MaxWidth="520"
+              HorizontalAlignment="Center" VerticalAlignment="Center">
+        <StackPanel Spacing="14">
+          <!-- The one place a large mark earns its keep: the window is otherwise empty and the
+               user has nothing yet to look at. -->
+          <views:Brandmark Width="56" Height="56" HorizontalAlignment="Left" Margin="0,0,0,4" />
+
+          <TextBlock Text="Welcome to OpenKey" FontSize="22" FontWeight="Bold" LineHeight="28"
+                     Foreground="{DynamicResource Body}" />
+          <TextBlock TextWrapping="Wrap" Foreground="{DynamicResource Body}" LineHeight="22"
+                     Text="Chat with capable AI models for free, with no subscription." />
+          <TextBlock TextWrapping="Wrap" Foreground="{DynamicResource Muted}" LineHeight="20" FontSize="13"
+                     Text="You need a free OpenRouter key once. OpenKey encrypts it for your Windows account and keeps it on this PC. It is never sent anywhere except OpenRouter." />
+
+          <Button Classes="primary" Content="Sign in with my browser"
+                  HorizontalAlignment="Left" Click="OnSignIn"
+                  IsEnabled="{Binding !IsSigningIn}" />
+
+          <TextBlock Text="or paste a key you already have" Foreground="{DynamicResource Muted}"
+                     FontSize="12" Margin="0,8,0,0" />
+          <Grid ColumnDefinitions="*,Auto" >
+            <TextBox Grid.Column="0" PasswordChar="•" PlaceholderText="Key"
+                     Text="{Binding KeyInput}" Margin="0,0,8,0" />
+            <Button Grid.Column="1" Classes="ghost" Content="Use key" Click="OnUseKey"
+                    IsEnabled="{Binding !IsSigningIn}" />
+          </Grid>
+          <TextBlock Foreground="{DynamicResource Muted}" FontSize="12"
+                     Text="Create one at openrouter.ai/keys" />
+        </StackPanel>
+      </Border>
+
+      <!-- Conversation, with the chat list beside it -->
+      <Grid Name="ConversationGrid" IsVisible="{Binding IsReady}" RowDefinitions="*,Auto">
+        <Grid.ColumnDefinitions>
+          <!-- 180 is the floor: a 13px chat title needs ~150px before it degrades to a column
+               of "Chat abou…" and stops being navigable. 360 is the ceiling, paired with the
+               320 minimum on the transcript and the window's 640 minimum — the three numbers
+               are coupled and must move together. -->
+          <!-- Width and MinWidth are driven from code-behind: hiding the panel has to zero the
+               column too, or the row keeps its 228px and the space is never given back. -->
+          <ColumnDefinition Width="228" MinWidth="180" MaxWidth="360" />
+          <ColumnDefinition Width="Auto" />
+          <ColumnDefinition Width="*" MinWidth="320" />
+        </Grid.ColumnDefinitions>
+
+        <!-- No BorderThickness: the splitter owns the hairline now, or there would be two
+             adjacent 1px lines. -->
+        <Border Grid.Column="0" Grid.RowSpan="2" IsVisible="{Binding ShowChats}" ClipToBounds="True"
+                Background="{DynamicResource SurfaceSunken}">
+          <Grid RowDefinitions="Auto,Auto,*">
+
+            <!-- Row zero of the list without being in it: a ListBoxItem would take selection and
+                 fight the SelectedChat setter, which opens a chat the moment it is assigned.
+                 Ghost rather than primary — Send is the app's primary action, and a brand fill on
+                 the quietest surface in the window would outshout it. -->
+            <Button Grid.Row="0" Classes="ghost sidebar" Content="+  New chat" Click="OnNewChat"
+                    ToolTip.Tip="Start another chat, keeping this one (Ctrl+N)" />
+
+            <TextBlock Grid.Row="1" Text="Chats" Margin="16,12,14,8" FontSize="11"
+                       FontWeight="SemiBold" Foreground="{DynamicResource Muted}" />
+
+            <ListBox Grid.Row="2" Name="ChatList" Classes="chats"
+                     ItemsSource="{Binding Chats}"
+                     SelectedItem="{Binding SelectedChat}">
+              <ListBox.Styles>
+                <!-- Padding moves off the container and onto the template Border, which is what
+                     carries the context menu. Otherwise right-clicking the container's padding
+                     ring hits nothing, and the menu has invisible dead zones. -->
+                <Style Selector="ListBoxItem">
+                  <Setter Property="Padding" Value="0" />
+                </Style>
+              </ListBox.Styles>
+              <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="storage:ChatSummary">
+                  <Border Padding="10,8" Background="Transparent" HorizontalAlignment="Stretch">
+                    <StackPanel Spacing="2">
+                      <!-- No local Foreground: it would beat the inherited value the selected
+                           row's presenter sets, so selected text would not invert. -->
+                      <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis"
+                                 FontSize="13" />
+                      <TextBlock Text="{Binding MessageCount, StringFormat=\{0\} messages}"
+                                 Foreground="{DynamicResource Muted}" FontSize="11" />
+                    </StackPanel>
+                    <Border.ContextMenu>
+                      <ContextMenu>
+                        <MenuItem Header="Rename…" Click="OnRenameChat" />
+                        <MenuItem Header="Delete" Classes="destructive" Click="OnDeleteChat" />
+                      </ContextMenu>
+                    </Border.ContextMenu>
+                  </Border>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+          </Grid>
+        </Border>
+
+        <GridSplitter Grid.Column="1" Grid.RowSpan="2" Classes="pane"
+                      IsVisible="{Binding ShowChats}"
+                      ToolTip.Tip="Drag to resize the chat list" />
+
+        <ScrollViewer Grid.Column="2" Grid.Row="0" Name="Scroller" Padding="24,20">
+          <Grid>
+
+            <!-- Outside the reading column on purpose. Inside it, "centred" meant centred in a
+                 720px block pinned to the left, so on a wide window it sat noticeably off to one
+                 side. With nothing else on screen there is no column for it to belong to. -->
+            <StackPanel IsVisible="{Binding IsConversationEmpty}" Spacing="8" Margin="0,80,0,0"
+                        HorizontalAlignment="Center">
+              <TextBlock Text="Ask anything" FontSize="18" FontWeight="SemiBold"
+                         Foreground="{DynamicResource Body}" HorizontalAlignment="Center" />
+              <TextBlock Foreground="{DynamicResource Muted}" HorizontalAlignment="Center"
+                         Text="Type a message below and press Enter." />
+            </StackPanel>
+
+            <!-- The reading column. Uncapped, a maximised window puts ~220 characters on a line. -->
+            <StackPanel Spacing="4" MaxWidth="{StaticResource ReadingWidth}"
+                        HorizontalAlignment="Left">
+
+            <ItemsControl ItemsSource="{Binding Messages}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:MessageViewModel">
+
+                  <!-- Turns differ by plane, not by indentation: your message sits on a raised
+                       card, the reply sits on the page. Scanning a long transcript for "where
+                       did I ask that" is then a single glance instead of a read. -->
+                  <Border Classes="turn" Classes.user="{Binding IsFromUser}">
+                    <StackPanel Spacing="6">
+
+                      <!-- MinHeight reserves the action row permanently. Revealing Copy on hover
+                           must not resize anything — same rule as the focus ring: nothing that
+                           affects layout animates. -->
+                      <Grid ColumnDefinitions="Auto,*,Auto" MinHeight="34">
+                        <TextBlock Grid.Column="0" Classes="speaker" Text="{Binding Header}"
+                                   FontWeight="SemiBold" FontSize="13" VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="1" Text="{Binding Subtitle}" FontSize="12"
+                                   Margin="8,0,8,0" VerticalAlignment="Center"
+                                   TextTrimming="CharacterEllipsis"
+                                   Foreground="{DynamicResource Muted}" />
+
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4"
+                                    VerticalAlignment="Center">
+                          <!-- Recovery, so it is always visible rather than hidden behind hover.
+                               A failed or stopped send deletes its empty reply, so the transcript
+                               ends on your message — and that is what this hangs off. The draft
+                               box has already been cleared by then, so this is the only place the
+                               text still exists. -->
+                          <Button Classes="ghost turnaction" Content="Try again" Click="OnRetry"
+                                  IsVisible="{Binding IsAwaitingReply}"
+                                  ToolTip.Tip="Send this message again" />
+
+                          <!-- Attached to what it copies, in its own row so it can never overlap
+                               the prose. -->
+                          <Button Classes="ghost turnaction copy" Content="Copy" Click="OnCopyTurn"
+                                  IsVisible="{Binding !IsFromUser}"
+                                  ToolTip.Tip="Copy this reply" />
+                        </StackPanel>
+                      </Grid>
+
+                      <ItemsControl ItemsSource="{Binding Blocks}">
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate x:DataType="vm:MarkdownBlock">
+                            <Panel Margin="0,2">
+                              <!-- Code fence: syntax highlighted, with its own copy button -->
+                              <views:CodeBlockView IsVisible="{Binding IsCode}" />
+
+                              <!-- Horizontal rule -->
+                              <Border IsVisible="{Binding IsRule}" Height="1" Margin="0,8"
+                                      Background="{DynamicResource Line}" />
+
+                              <!-- Everything else. 1.55 line height: prose at 15px with default
+                                   leading is the clearest tell of an unlaid-out app. -->
+                              <SelectableTextBlock IsVisible="{Binding IsNotCode}"
+                                                   views:InlineText.Spans="{Binding Runs}"
+                                                   TextWrapping="Wrap"
+                                                   FontSize="{Binding FontSize}"
+                                                   LineHeight="{Binding LineHeight}"
+                                                   Margin="{Binding LeftMargin}"
+                                                   Foreground="{DynamicResource Body}" />
+                            </Panel>
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+
+                      <!-- Waiting on the model: three dots breathing in sequence. Deliberately not
+                           the OpenKey mark spinning — animating the logo would permanently tie it
+                           to "busy", which is the one meaning it must never acquire. -->
+                      <StackPanel Classes="thinking" Orientation="Horizontal" Spacing="5"
+                                  Margin="2,6,0,2" IsVisible="{Binding IsThinking}">
+                        <Ellipse Classes="d1" />
+                        <Ellipse Classes="d2" />
+                        <Ellipse Classes="d3" />
+                      </StackPanel>
+
+                      <!-- Once text is arriving the caret takes over, trailing the last character. -->
+                      <TextBlock Text="▍" Classes="caret" IsVisible="{Binding IsTyping}"
+                                 Foreground="{DynamicResource Brand}" FontSize="13" />
+                    </StackPanel>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </Grid>
+        </ScrollViewer>
+
+        <!-- Composer. Inside the conversation column, so the chat list runs the full height of
+             the window beside it and the bar stops where the conversation stops. Being in this
+             column is also what lines its contents up with the transcript — no gutter needed. -->
+        <Border Grid.Column="2" Grid.Row="1" Background="{DynamicResource SurfaceSunken}" Padding="24,12"
+          BorderBrush="{DynamicResource Line}" BorderThickness="0,1,0,0"
+          IsVisible="{Binding IsReady}">
+                <!-- Spans the pane rather than matching the transcript's 720 reading cap. The cap was
+                 there so the field previewed the shape the message would take — but messages are
+                 now right-anchored bubbles capped at 560, so it previewed nothing, and at 1920 it
+                 left roughly 820px of empty bar to the right of Send. Reading width governs
+                 reading; an input is not read. -->
+            <StackPanel Spacing="8">
+
+        <Border IsVisible="{Binding HasStatus}" CornerRadius="6" Padding="10,7"
+                Background="{DynamicResource SurfaceRaised}"
+                BorderThickness="0,0,0,2"
+                BorderBrush="{Binding StatusKind, Converter={StaticResource StatusBrush}}">
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Grid.Column="0" Text="{Binding Status}" TextWrapping="Wrap"
+                       VerticalAlignment="Center" LineHeight="18"
+                       Foreground="{DynamicResource Body}" FontSize="12" />
+            <!-- Was ~14px tall: the smallest control in the app, and the one you press when
+                 something has already gone wrong. Now a standard 34px icon button. -->
+            <Button Grid.Column="1" Classes="icon" Content="✕" Click="OnDismissStatus"
+                    FontSize="12" VerticalAlignment="Center"
+                    ToolTip.Tip="Dismiss" />
+          </Grid>
+        </Border>
+
+        <Grid ColumnDefinitions="*,Auto">
+          <TextBox Name="Composer" Grid.Column="0"
+                   Text="{Binding Draft}"
+                   PlaceholderText="Type a message, then press Enter"
+                   AcceptsReturn="True"
+                   TextWrapping="Wrap"
+                   MaxHeight="160"
+                   Margin="0,0,8,0" />
+
+          <Button Grid.Column="1" Classes="primary" Content="Send"
+                  Click="OnSend" IsVisible="{Binding IsIdle}"
+                  IsEnabled="{Binding CanSend}" VerticalAlignment="Bottom"
+                  ToolTip.Tip="Send this message (Enter)" />
+          <Button Grid.Column="1" Classes="danger" Content="Stop"
+                  Click="OnStop" IsVisible="{Binding IsBusy}" VerticalAlignment="Bottom"
+                  ToolTip.Tip="Stop this reply (Esc)" />
+        </Grid>
+
+        <!-- The model is an input to the send you are about to make, not a toolbar setting, so
+             it sits with the thing it acts on, on the line you read while deciding. -->
+        <Grid ColumnDefinitions="Auto,*">
+          <ComboBox Grid.Column="0"
+                    ItemsSource="{Binding Models}"
                     SelectedItem="{Binding SelectedModel}"
-                    MinWidth="210"
+                    MinWidth="200" MaxWidth="260"
                     ToolTip.Tip="Choose which model answers you">
             <ComboBox.ItemTemplate>
               <DataTemplate x:DataType="vm:ModelChoice">
@@ -77,205 +364,18 @@
             </ComboBox.ItemTemplate>
           </ComboBox>
 
-          <Button Classes="ghost" Content="New chat" Click="OnNewChat"
-                  ToolTip.Tip="Start another chat, keeping this one (Ctrl+N)" />
-          <Button Classes="ghost" Content="Retry" Click="OnRetry"
-                  IsEnabled="{Binding IsIdle}"
-                  ToolTip.Tip="Send your last message again" />
-          <Button Classes="ghost" Content="Copy" Click="OnCopyLast"
-                  ToolTip.Tip="Copy the last reply" />
-          <Button Classes="ghost" Content="Export" Click="OnExport"
-                  ToolTip.Tip="Save this conversation as a markdown file" />
-
-          <Button Classes="ghost" Content="&#x22EF;" FontSize="16" Padding="10,2"
-                  ToolTip.Tip="Settings">
-            <Button.Flyout>
-              <MenuFlyout Placement="BottomEdgeAlignedRight">
-                <MenuItem Header="Theme">
-                  <MenuItem Header="Default" Click="OnThemeMenu" Tag="default" />
-                  <MenuItem Header="Dark" Click="OnThemeMenu" Tag="dark" />
-                  <MenuItem Header="Light" Click="OnThemeMenu" Tag="light" />
-                  <MenuItem Header="Mono" Click="OnThemeMenu" Tag="mono" />
-                </MenuItem>
-                <Separator />
-                <MenuItem Header="About OpenKey" Click="OnAbout" />
-                <Separator />
-                <!-- Destructive, so it sits alone at the bottom behind a menu, where it cannot be
-                     hit while reaching for Export. -->
-                <MenuItem Header="Erase everything…" Click="OnResetClicked"
-                          Foreground="{DynamicResource Danger}" />
-              </MenuFlyout>
-            </Button.Flyout>
-          </Button>
-        </StackPanel>
-      </Grid>
-    </Border>
-
-    <!-- Body: sign-in or conversation -->
-    <Panel Grid.Row="1">
-
-      <!-- First run -->
-      <Border IsVisible="{Binding NeedsKey}" Padding="32" MaxWidth="560" VerticalAlignment="Center">
-        <StackPanel Spacing="14">
-          <TextBlock Text="Welcome to OpenKey" FontSize="22" FontWeight="Bold"
-                     Foreground="{DynamicResource Body}" />
-          <TextBlock TextWrapping="Wrap" Foreground="{DynamicResource Body}"
-                     Text="Chat with capable AI models for free, with no subscription." />
-          <TextBlock TextWrapping="Wrap" Foreground="{DynamicResource Muted}"
-                     Text="You need a free OpenRouter key once. OpenKey encrypts it for your Windows account and keeps it on this PC. It is never sent anywhere except OpenRouter." />
-
-          <Button Classes="primary" Content="Sign in with my browser"
-                  HorizontalAlignment="Left" Click="OnSignIn"
-                  IsEnabled="{Binding !IsSigningIn}" />
-
-          <TextBlock Text="or paste a key you already have" Foreground="{DynamicResource Muted}"
-                     FontSize="12" Margin="0,8,0,0" />
-          <Grid ColumnDefinitions="*,Auto" >
-            <TextBox Grid.Column="0" PasswordChar="•" Watermark="Key"
-                     Text="{Binding KeyInput}" Margin="0,0,8,0" />
-            <Button Grid.Column="1" Content="Use key" Click="OnUseKey"
-                    IsEnabled="{Binding !IsSigningIn}" />
-          </Grid>
-          <TextBlock Foreground="{DynamicResource Muted}" FontSize="12"
-                     Text="Create one at openrouter.ai/keys" />
-        </StackPanel>
-      </Border>
-
-      <!-- Conversation, with the chat list beside it -->
-      <Grid IsVisible="{Binding IsReady}" ColumnDefinitions="Auto,*">
-
-        <Border Grid.Column="0" Width="228" IsVisible="{Binding ShowChats}"
-                Background="{DynamicResource SurfaceRaised}"
-                BorderBrush="{DynamicResource Line}" BorderThickness="0,0,1,0">
-          <Grid RowDefinitions="Auto,*">
-            <TextBlock Grid.Row="0" Text="Chats" Margin="14,12,14,8" FontSize="12"
-                       FontWeight="SemiBold" Foreground="{DynamicResource Muted}" />
-
-            <ListBox Grid.Row="1" Name="ChatList"
-                     ItemsSource="{Binding Chats}"
-                     SelectedItem="{Binding SelectedChat}"
-                     Background="Transparent" BorderThickness="0"
-                     Padding="6,0,6,10">
-              <ListBox.ItemTemplate>
-                <DataTemplate x:DataType="storage:ChatSummary">
-                  <Border Padding="4,6" Background="Transparent">
-                    <StackPanel Spacing="2">
-                      <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis"
-                                 Foreground="{DynamicResource Body}" FontSize="13" />
-                      <TextBlock Text="{Binding MessageCount, StringFormat=\{0\} messages}"
-                                 Foreground="{DynamicResource Muted}" FontSize="11" />
-                    </StackPanel>
-                    <Border.ContextMenu>
-                      <ContextMenu>
-                        <MenuItem Header="Rename…" Click="OnRenameChat" />
-                        <MenuItem Header="Delete" Click="OnDeleteChat"
-                                  Foreground="{DynamicResource Danger}" />
-                      </ContextMenu>
-                    </Border.ContextMenu>
-                  </Border>
-                </DataTemplate>
-              </ListBox.ItemTemplate>
-            </ListBox>
-          </Grid>
-        </Border>
-
-        <ScrollViewer Grid.Column="1" Name="Scroller" Padding="20,16">
-          <StackPanel Spacing="18">
-
-            <Border IsVisible="{Binding IsConversationEmpty}" Padding="24" Margin="0,40,0,0">
-              <StackPanel Spacing="8" HorizontalAlignment="Center">
-                <TextBlock Text="Ask anything" FontSize="18" FontWeight="SemiBold"
-                           Foreground="{DynamicResource Body}" HorizontalAlignment="Center" />
-                <TextBlock Foreground="{DynamicResource Muted}" HorizontalAlignment="Center"
-                           Text="Type a message below and press Enter." />
-              </StackPanel>
-            </Border>
-
-            <ItemsControl ItemsSource="{Binding Messages}">
-              <ItemsControl.ItemTemplate>
-                <DataTemplate x:DataType="vm:MessageViewModel">
-                  <StackPanel Spacing="6" Margin="0,0,0,14">
-
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                      <TextBlock Text="{Binding Header}" FontWeight="SemiBold" FontSize="13"
-                                 Foreground="{DynamicResource Brand}" />
-                      <TextBlock Text="{Binding Subtitle}" FontSize="12" VerticalAlignment="Center"
-                                 Foreground="{DynamicResource Muted}" />
-                    </StackPanel>
-
-                    <ItemsControl ItemsSource="{Binding Blocks}">
-                      <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="vm:MarkdownBlock">
-                          <Panel Margin="0,2">
-                            <!-- Code fence: syntax highlighted, with its own copy button -->
-                            <views:CodeBlockView IsVisible="{Binding IsCode}" />
-
-                            <!-- Horizontal rule -->
-                            <Border IsVisible="{Binding IsRule}" Height="1" Margin="0,8"
-                                    Background="{DynamicResource Line}" />
-
-                            <!-- Everything else -->
-                            <SelectableTextBlock IsVisible="{Binding IsNotCode}"
-                                                 Text="{Binding Text}"
-                                                 TextWrapping="Wrap"
-                                                 FontSize="{Binding FontSize}"
-                                                 Margin="{Binding LeftMargin}"
-                                                 Foreground="{DynamicResource Body}" />
-                          </Panel>
-                        </DataTemplate>
-                      </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-
-                    <TextBlock Text="▍" IsVisible="{Binding IsStreaming}"
-                               Foreground="{DynamicResource Brand}" FontSize="13" />
-                  </StackPanel>
-                </DataTemplate>
-              </ItemsControl.ItemTemplate>
-            </ItemsControl>
+          <!-- Trims rather than wraps: at the 640 minimum width a 200px picker leaves little
+               room, and a second line would push the composer taller exactly when space is
+               shortest. -->
+          <TextBlock Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center"
+                     Text="Enter sends · Shift+Enter adds a line · Esc stops · Ctrl+N new chat"
+                     FontSize="11" TextTrimming="CharacterEllipsis"
+                     Foreground="{DynamicResource Muted}" />
+        </Grid>
           </StackPanel>
-        </ScrollViewer>
+    </Border>
       </Grid>
     </Panel>
 
-    <!-- Composer + status -->
-    <Border Grid.Row="2" Background="{DynamicResource SurfaceRaised}" Padding="16,12"
-            BorderBrush="{DynamicResource Line}" BorderThickness="0,1,0,0"
-            IsVisible="{Binding IsReady}">
-      <StackPanel Spacing="8">
-
-        <Border IsVisible="{Binding HasStatus}" CornerRadius="6" Padding="10,7"
-                Background="{DynamicResource CodeSurface}"
-                BorderThickness="0,0,0,2"
-                BorderBrush="{Binding StatusKind, Converter={StaticResource StatusBrush}}">
-          <Grid ColumnDefinitions="*,Auto,Auto">
-            <TextBlock Grid.Column="0" Text="{Binding Status}" TextWrapping="Wrap"
-                       VerticalAlignment="Center"
-                       Foreground="{DynamicResource Body}" FontSize="12" />
-            <Button Grid.Column="2" Classes="ghost" Content="✕" Click="OnDismissStatus"
-                    Padding="6,0" FontSize="11" VerticalAlignment="Center" />
-          </Grid>
-        </Border>
-
-        <Grid ColumnDefinitions="*,Auto">
-          <TextBox Name="Composer" Grid.Column="0"
-                   Text="{Binding Draft}"
-                   Watermark="Type a message, then press Enter"
-                   AcceptsReturn="True"
-                   TextWrapping="Wrap"
-                   MaxHeight="160"
-                   VerticalContentAlignment="Center"
-                   Margin="0,0,8,0" />
-
-          <Button Grid.Column="1" Classes="primary" Content="Send"
-                  Click="OnSend" IsVisible="{Binding IsIdle}"
-                  IsEnabled="{Binding CanSend}" VerticalAlignment="Bottom" />
-          <Button Grid.Column="1" Classes="ghost" Content="Stop"
-                  Click="OnStop" IsVisible="{Binding IsBusy}" VerticalAlignment="Bottom" />
-        </Grid>
-
-        <TextBlock Text="Enter sends · Shift+Enter adds a line · Esc stops · Ctrl+N new chat" FontSize="11"
-                   Foreground="{DynamicResource Muted}" />
-      </StackPanel>
-    </Border>
   </Grid>
 </Window>

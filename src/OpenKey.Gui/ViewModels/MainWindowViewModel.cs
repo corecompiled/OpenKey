@@ -6,6 +6,7 @@ using OpenKey.Core.AppPaths;
 using OpenKey.Core.Engine;
 using OpenKey.Core.Providers;
 using OpenKey.Core.Storage;
+using OpenKey.Core.Text;
 using OpenKey.Core.Updates;
 using OpenKey.Providers.OpenRouter;
 using OpenKey.Windows.OAuth;
@@ -316,13 +317,15 @@ public sealed class MainWindowViewModel : ObservableObject
     {
         if (!CanSend) return;
 
-        var text = Draft.TrimEnd();
+        // StripInvisible, not Normalize: this preserves leading whitespace, so the first line of
+        // a pasted code block keeps its indentation.
+        var text = UserInput.StripInvisible(Draft).TrimEnd();
         Draft = string.Empty;
         Status = null;
 
-        Messages.Add(new MessageViewModel(Speaker.You, text));
+        Messages.Add(new MessageViewModel(Speaker.You, UserName, text));
 
-        var reply = new MessageViewModel(Speaker.Assistant) { IsStreaming = true };
+        var reply = new MessageViewModel(Speaker.Assistant, UserName) { IsStreaming = true };
         Messages.Add(reply);
 
         var cts = new CancellationTokenSource();
@@ -385,6 +388,7 @@ public sealed class MainWindowViewModel : ObservableObject
             cts.Dispose();
             IsBusy = false;
             Raise(nameof(ActiveModel));
+            RefreshRetryAffordance();
         }
     }
 
@@ -407,12 +411,36 @@ public sealed class MainWindowViewModel : ObservableObject
             return;
         }
 
+        // The engine drops a failed turn from its own history, but the transcript still shows the
+        // message — that is deliberate, and it is the only place the text survives once the draft
+        // box is cleared. SendAsync appends a fresh user turn, so without this the message appears
+        // twice: once for the attempt that failed and once for the retry.
+        if (Messages.Count > 0
+            && Messages[^1] is { IsFromUser: true, IsAwaitingReply: true } stale
+            && stale.Text == last)
+        {
+            Messages.Remove(stale);
+        }
+
         Draft = last;
         await SendAsync();
     }
 
-    public string? LastReply =>
-        Messages.LastOrDefault(m => m.Speaker == Speaker.Assistant && m.HasText)?.Text;
+    /// <summary>
+    /// Marks the trailing user turn as awaiting a reply, which is what shows its "Try again"
+    /// button.
+    /// <para>
+    /// Called explicitly rather than hooked to <c>Messages.CollectionChanged</c>: the user turn is
+    /// added before <see cref="IsBusy"/> is set, so a collection-driven refresh would flash the
+    /// button on for the instant between the two.
+    /// </para>
+    /// </summary>
+    private void RefreshRetryAffordance()
+    {
+        var last = Messages.Count > 0 ? Messages[^1] : null;
+        foreach (var message in Messages)
+            message.IsAwaitingReply = ReferenceEquals(message, last) && message.IsFromUser && !IsBusy;
+    }
 
     /// <summary>
     /// Renders the conversation as markdown, matching the console's <c>/export</c>. Returns null
@@ -462,6 +490,11 @@ public sealed class MainWindowViewModel : ObservableObject
         _config.Save(_config.Current with { Theme = wanted });
         Raise(nameof(Theme));
         ThemeChanged?.Invoke(wanted);
+
+        // The status accent comes from a converter, which resolves its brush once at bind time and
+        // has no reason to re-run when the palette is swapped underneath it. Without this the bar
+        // keeps the previous theme's colour until the next status message replaces it.
+        Raise(nameof(StatusKind));
     }
 
     // ---- about ---------------------------------------------------------------------------
@@ -485,8 +518,29 @@ public sealed class MainWindowViewModel : ObservableObject
         {
             Messages.Add(new MessageViewModel(
                 turn.Role == ChatMessage.UserRole ? Speaker.You : Speaker.Assistant,
+                UserName,
                 turn.Content));
         }
+
+        // A conversation reopened after a failed send still ends on the unanswered message, so the
+        // offer to resend has to survive a restart.
+        RefreshRetryAffordance();
+    }
+
+    /// <summary>What OpenKey calls you: your chosen name, or your Windows account name.</summary>
+    public string UserName => _config.Current.DisplayName;
+
+    /// <summary>
+    /// Renames you and relabels the existing transcript, so it does not end up addressing you by
+    /// two names. Blank clears the override and returns to the Windows account name.
+    /// </summary>
+    public void SetUserName(string? name)
+    {
+        _config.Save(_config.Current.WithUserName(name));
+
+        var resolved = UserName;
+        foreach (var message in Messages) message.SetUserName(resolved);
+        Raise(nameof(UserName));
     }
 
     public async Task RefreshChatsAsync()
@@ -583,13 +637,47 @@ public sealed class MainWindowViewModel : ObservableObject
 
     // ---- status --------------------------------------------------------------------------
 
+    /// <summary>How long a confirmation stays before clearing itself.</summary>
+    private static readonly TimeSpan StatusLifetime = TimeSpan.FromSeconds(5);
+
+    /// <summary>
+    /// Identifies the message currently on screen, so a pending auto-dismiss only ever clears the
+    /// message it was scheduled for. Without it, deleting two chats in quick succession would let
+    /// the first timer wipe the second confirmation early.
+    /// </summary>
+    private int _statusToken;
+
     private void Show(StatusKind kind, string message)
     {
         StatusKind = kind;
         Status = message;
+
+        var token = ++_statusToken;
+
+        // Confirmations clear themselves; warnings and failures do not. "Chat deleted" has served
+        // its purpose the moment it is read, but a message explaining why a reply failed should
+        // still be there when you look back at it, and it is the only thing on screen carrying the
+        // reason. Those wait to be dismissed or replaced.
+        if (kind is StatusKind.Ok or StatusKind.Info) _ = AutoDismissAsync(token);
     }
 
-    public void DismissStatus() => Status = null;
+    private async Task AutoDismissAsync(int token)
+    {
+        await Task.Delay(StatusLifetime);
+
+        // Posted rather than assumed: the delay resumes on a pool thread if the sync context is
+        // ever absent, and this touches a bound property.
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (_statusToken == token) Status = null;
+        });
+    }
+
+    public void DismissStatus()
+    {
+        _statusToken++;
+        Status = null;
+    }
 
     /// <summary>
     /// Same rule as the console: say what happened and what to do next. Raw error-kind names and

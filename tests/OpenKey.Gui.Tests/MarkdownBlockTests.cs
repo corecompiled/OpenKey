@@ -113,7 +113,7 @@ public sealed class MessageViewModelTests
     [Fact]
     public void AppendingRebuildsBlocks()
     {
-        var msg = new MessageViewModel(Speaker.Assistant);
+        var msg = new MessageViewModel(Speaker.Assistant, "Tester");
         msg.Append("Hello");
         msg.Append(" there.");
 
@@ -125,7 +125,7 @@ public sealed class MessageViewModelTests
     public void ResetDiscardsAnAbandonedAttempt()
     {
         // The GUI half of the mid-reply rotation fix: without this the answer appears twice.
-        var msg = new MessageViewModel(Speaker.Assistant);
+        var msg = new MessageViewModel(Speaker.Assistant, "Tester");
         msg.Append("The capital of France is Par");
         msg.Reset();
         msg.Append("The capital of France is Paris.");
@@ -137,14 +137,28 @@ public sealed class MessageViewModelTests
     [Fact]
     public void HeaderNamesTheSpeaker()
     {
-        Assert.Equal("OpenKey AI", new MessageViewModel(Speaker.Assistant).Header);
-        Assert.Equal(Environment.UserName, new MessageViewModel(Speaker.You).Header);
+        Assert.Equal("OpenKey AI", new MessageViewModel(Speaker.Assistant, "Tester").Header);
+        Assert.Equal("Tester", new MessageViewModel(Speaker.You, "Tester").Header);
+    }
+
+    [Fact]
+    public void RenamingYourselfRelabelsMessagesYouAlreadySent()
+    {
+        // A transcript addressing you by two different names would read as two people.
+        var mine = new MessageViewModel(Speaker.You, "Tester", "hello");
+        var reply = new MessageViewModel(Speaker.Assistant, "Tester", "hi");
+
+        mine.SetUserName("Sam");
+        reply.SetUserName("Sam");
+
+        Assert.Equal("Sam", mine.Header);
+        Assert.Equal("OpenKey AI", reply.Header);
     }
 
     [Fact]
     public void SubtitleIsEmptyUntilAModelAnswers()
     {
-        var msg = new MessageViewModel(Speaker.Assistant);
+        var msg = new MessageViewModel(Speaker.Assistant, "Tester");
         Assert.Equal(string.Empty, msg.Subtitle);
 
         msg.ModelId = "vendor/model:free";
@@ -156,7 +170,7 @@ public sealed class MessageViewModelTests
     [Fact]
     public void LongRepliesSwitchToMinutes()
     {
-        var msg = new MessageViewModel(Speaker.Assistant) { ModelId = "m", Elapsed = TimeSpan.FromSeconds(75) };
+        var msg = new MessageViewModel(Speaker.Assistant, "Tester") { ModelId = "m", Elapsed = TimeSpan.FromSeconds(75) };
         Assert.Contains("1m 15s", msg.Subtitle, StringComparison.Ordinal);
     }
 
@@ -164,7 +178,7 @@ public sealed class MessageViewModelTests
     public void BlocksShrinkWhenTextIsReplacedWithLess()
     {
         // Blocks are updated in place to avoid flicker, so the trailing ones must be removed.
-        var msg = new MessageViewModel(Speaker.Assistant);
+        var msg = new MessageViewModel(Speaker.Assistant, "Tester");
         msg.Append("one\n\ntwo\n\nthree");
         Assert.Equal(3, msg.Blocks.Count);
 

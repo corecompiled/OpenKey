@@ -24,10 +24,13 @@ public sealed class MessageViewModel : ObservableObject
     private bool _isStreaming;
     private string? _modelId;
     private TimeSpan _elapsed;
+    private string _userName;
+    private bool _isAwaitingReply;
 
-    public MessageViewModel(Speaker speaker, string text = "")
+    public MessageViewModel(Speaker speaker, string userName, string text = "")
     {
         Speaker = speaker;
+        _userName = userName;
         _text = text;
         if (text.Length > 0) RebuildBlocks();
     }
@@ -36,14 +39,53 @@ public sealed class MessageViewModel : ObservableObject
 
     public bool IsFromUser => Speaker == Speaker.You;
 
-    public string Header => Speaker == Speaker.You ? Environment.UserName : "OpenKey AI";
+    /// <summary>
+    /// True only on the trailing user turn when nothing answered it, which is exactly the state a
+    /// resend applies to. A failed or stopped turn deletes its empty assistant reply, so "the last
+    /// message is still yours" is a reliable signal rather than a guess.
+    /// </summary>
+    public bool IsAwaitingReply
+    {
+        get => _isAwaitingReply;
+        set => Set(ref _isAwaitingReply, value);
+    }
+
+    public string Header => Speaker == Speaker.You ? _userName : "OpenKey AI";
+
+    /// <summary>
+    /// Renaming yourself relabels the whole transcript, not just messages sent afterwards — a
+    /// transcript addressing you by two different names would look like two different people.
+    /// </summary>
+    public void SetUserName(string name)
+    {
+        if (_userName == name) return;
+        _userName = name;
+        if (Speaker == Speaker.You) Raise(nameof(Header));
+    }
+
+    /// <summary>
+    /// Waiting on the model with nothing to show yet — the gap between sending and the first token,
+    /// which on a busy free model can run to tens of seconds. Distinct from <see cref="IsTyping"/>
+    /// so the two states can look different: an empty caret blinking at nothing reads as a stall,
+    /// not as progress.
+    /// </summary>
+    public bool IsThinking => IsStreaming && !HasText;
+
+    /// <summary>Tokens are arriving; the caret trails the text.</summary>
+    public bool IsTyping => IsStreaming && HasText;
 
     public ObservableCollection<MarkdownBlock> Blocks { get; } = new();
 
     public string Text
     {
         get => _text;
-        private set { if (Set(ref _text, value)) Raise(nameof(HasText)); }
+        private set
+        {
+            if (!Set(ref _text, value)) return;
+            Raise(nameof(HasText));
+            Raise(nameof(IsThinking));
+            Raise(nameof(IsTyping));
+        }
     }
 
     public bool HasText => _text.Length > 0;
@@ -52,7 +94,12 @@ public sealed class MessageViewModel : ObservableObject
     public bool IsStreaming
     {
         get => _isStreaming;
-        set => Set(ref _isStreaming, value);
+        set
+        {
+            if (!Set(ref _isStreaming, value)) return;
+            Raise(nameof(IsThinking));
+            Raise(nameof(IsTyping));
+        }
     }
 
     public string? ModelId

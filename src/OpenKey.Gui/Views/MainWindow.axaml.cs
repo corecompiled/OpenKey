@@ -1,3 +1,4 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Input.Platform;
@@ -101,7 +102,43 @@ public partial class MainWindow : Window
         FocusComposer();
     }
 
-    private void OnToggleChats(object? sender, RoutedEventArgs e) => Vm.ShowChats = !Vm.ShowChats;
+    /// <summary>Width the chat list returns to when shown again, updated by the splitter.</summary>
+    private double _sidebarWidth = 228;
+
+    private void OnToggleChats(object? sender, RoutedEventArgs e)
+    {
+        Vm.ShowChats = !Vm.ShowChats;
+        ApplySidebarWidth();
+    }
+
+    /// <summary>
+    /// Hiding the panel has to zero its column as well. <c>IsVisible</c> collapses the Border but
+    /// leaves the <c>ColumnDefinition</c> at its width, so toggling the chat list off used to leave
+    /// a 228px empty strip where it had been.
+    /// </summary>
+    private void ApplySidebarWidth()
+    {
+        if (this.FindControl<Grid>("ConversationGrid")?.ColumnDefinitions is not { Count: > 0 } columns)
+            return;
+
+        var column = columns[0];
+
+        if (Vm.ShowChats)
+        {
+            column.MinWidth = SidebarMinWidth;
+            column.Width = new GridLength(_sidebarWidth);
+            return;
+        }
+
+        // Remember where the splitter left it before collapsing, so showing it again does not
+        // discard a width the user chose.
+        if (column.Width.IsAbsolute && column.Width.Value > 0) _sidebarWidth = column.Width.Value;
+
+        column.MinWidth = 0;
+        column.Width = new GridLength(0);
+    }
+
+    private const double SidebarMinWidth = 180;
 
     private async void OnDeleteChat(object? sender, RoutedEventArgs e)
     {
@@ -112,7 +149,8 @@ public partial class MainWindow : Window
         var confirm = new ConfirmWindow(
             "Delete this chat?",
             $"\"{chat.Title}\" will be permanently deleted from this PC.",
-            "Delete");
+            "Delete",
+            destructive: true);
 
         if (await confirm.ShowDialog<bool>(this)) await Vm.DeleteChatAsync(chat);
     }
@@ -127,6 +165,22 @@ public partial class MainWindow : Window
             if (chat.Id != Vm.SelectedChat?.Id) await Vm.OpenChatAsync(chat.Id);
             await Vm.RenameCurrentChatAsync(title);
         }
+    }
+
+    /// <summary>
+    /// Changes what OpenKey calls you. Deliberately not asked at first run — that screen already
+    /// asks for a key, and the Windows account name is right almost every time, so this is
+    /// editable rather than demanded.
+    /// </summary>
+    private async void OnChangeName(object? sender, RoutedEventArgs e)
+    {
+        var dialog = new RenameWindow(
+            Vm.UserName,
+            heading: "What should OpenKey call you?",
+            placeholder: "Your name",
+            confirmLabel: "Save");
+
+        if (await dialog.ShowDialog<string?>(this) is { } name) Vm.SetUserName(name);
     }
 
     private void OnThemeMenu(object? sender, RoutedEventArgs e)
@@ -152,19 +206,28 @@ public partial class MainWindow : Window
         await Vm.RetryAsync();
     }
 
-    private async void OnCopyLast(object? sender, RoutedEventArgs e)
+    /// <summary>
+    /// Copies the reply the button belongs to.
+    /// <para>
+    /// This replaces a single header button that always copied the <em>latest</em> reply: scroll up,
+    /// read an older answer, press Copy, and you silently got a different message than the one you
+    /// were looking at. A per-message action needs to be attached to the message.
+    /// </para>
+    /// </summary>
+    private async void OnCopyTurn(object? sender, RoutedEventArgs e)
     {
-        if (Vm.LastReply is not { } text)
-        {
-            Vm.NotifyStatus(StatusKind.Info, "No reply to copy yet.");
-            return;
-        }
+        if (sender is not Button { DataContext: MessageViewModel turn } button || !turn.HasText) return;
 
-        var clipboard = GetTopLevel(this)?.Clipboard;
+        var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
         if (clipboard is null) return;
 
-        await clipboard.SetTextAsync(text);
-        Vm.NotifyStatus(StatusKind.Ok, "Last reply copied to the clipboard.");
+        await clipboard.SetTextAsync(turn.Text);
+
+        // Confirm on the button itself, like the code block does. No status message: you are
+        // already looking at the thing you pressed.
+        button.Content = "Copied";
+        await Task.Delay(1400);
+        button.Content = "Copy";
     }
 
     private async void OnExport(object? sender, RoutedEventArgs e)
@@ -214,7 +277,8 @@ public partial class MainWindow : Window
             "Erase everything?",
             "Your saved key and your entire chat history will be deleted from this PC. "
                 + "You'll need to sign in again.",
-            "Erase everything");
+            "Erase everything",
+            destructive: true);
 
         if (await confirm.ShowDialog<bool>(this)) await Vm.ResetEverythingAsync();
     }
