@@ -5,6 +5,13 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **OpenKey tells you when a new version is out.** It checks once at launch and shows a quiet line
+  with the link — nothing is ever downloaded or installed for you. Turn it off with
+  `"checkForUpdates": false` in `config.json`; see `SECURITY.md` for exactly what the check sends,
+  which is nothing beyond the request itself.
+
 ## [0.3.0] — 2026-08-03
 
 ### Added

@@ -14,10 +14,33 @@ Include what you did, what happened, and what you expected. A proof of concept h
   decrypt it. Copying the file to another PC or another user account yields nothing usable.
 - **Your conversations** are stored in plain JSON at `%APPDATA%\OpenKey\session.json`. They are not
   encrypted. Anyone with access to your Windows account can read them. `/reset` deletes them.
-- **Network traffic** goes to `openrouter.ai` and nowhere else. The only other connection OpenKey
-  ever opens is a local `http://localhost:3000/callback` listener, briefly, during browser sign-in.
-- **No telemetry.** No analytics, no crash reporting, no phone-home, in any phase. This is a
+- **Network traffic** goes to `openrouter.ai`, plus one request to `api.github.com` at launch to
+  ask whether a newer release exists. The only other connection OpenKey opens is a local
+  `http://localhost:3000/callback` listener, briefly, during browser sign-in.
+- **No telemetry.** No analytics, no crash reporting, no usage data, in any phase. This is a
   standing project rule, not a current default.
+
+### About the update check
+
+It is worth being precise, because "checks for updates" and "phones home" can look alike.
+
+The check is an unauthenticated `GET` of a public page — the same URL a browser would open — and
+sends no identifier, no key, no version history and no usage data. It cannot be correlated with an
+account because no account is involved.
+
+It does, however, reveal to GitHub that *someone at your IP launched OpenKey*. That is a real
+disclosure, small but not nothing, so it is declared here rather than buried, and you can switch it
+off:
+
+```json
+{ "checkForUpdates": false }
+```
+
+in `%APPDATA%\OpenKey\config.json`.
+
+**Nothing is ever downloaded or installed automatically.** OpenKey tells you a version exists and
+gives you the link. A tool that replaces its own binary is a tool you are right to distrust, and no
+phase of this project will add one.
 
 ## Threat model
 

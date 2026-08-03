@@ -6,6 +6,7 @@ using OpenKey.Core.AppPaths;
 using OpenKey.Core.Engine;
 using OpenKey.Core.Providers;
 using OpenKey.Core.Storage;
+using OpenKey.Core.Updates;
 using OpenKey.Providers.OpenRouter;
 using OpenKey.Windows.OAuth;
 
@@ -18,6 +19,7 @@ public sealed class MainWindowViewModel : ObservableObject
     private readonly IModelCatalog _catalog;
     private readonly IRotationPolicy _rotation;
     private readonly IConfigStore _config;
+    private readonly IUpdateChecker _updates;
     private readonly IAppPaths _paths;
     private readonly HttpClient _http;
 
@@ -36,6 +38,7 @@ public sealed class MainWindowViewModel : ObservableObject
         IModelCatalog catalog,
         IRotationPolicy rotation,
         IConfigStore config,
+        IUpdateChecker updates,
         IAppPaths paths,
         HttpClient http)
     {
@@ -44,6 +47,7 @@ public sealed class MainWindowViewModel : ObservableObject
         _catalog = catalog;
         _rotation = rotation;
         _config = config;
+        _updates = updates;
         _paths = paths;
         _http = http;
 
@@ -163,6 +167,19 @@ public sealed class MainWindowViewModel : ObservableObject
         }
 
         await LoadModelsAsync();
+
+        // Not awaited: the window is usable immediately, and a new version is never urgent.
+        _ = CheckForUpdateAsync();
+    }
+
+    private async Task CheckForUpdateAsync()
+    {
+        if (!_config.Current.CheckForUpdates) return;
+
+        var found = await _updates.CheckAsync(Version, CancellationToken.None);
+        if (found is null) return;
+
+        Show(StatusKind.Info, $"OpenKey {found.Version} is available — {found.Url}");
     }
 
     public async Task LoadModelsAsync()

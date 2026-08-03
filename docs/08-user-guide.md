@@ -114,7 +114,11 @@ Your key is encrypted so that only your Windows account on this PC can read it â
 to another machine gets someone nothing. **Your conversation is not encrypted**, so anyone who can
 use your Windows account can read it.
 
-OpenKey talks to OpenRouter and nowhere else. No analytics, no tracking, ever.
+OpenKey talks to OpenRouter, and once at launch asks GitHub whether a newer version exists. That
+check sends nothing about you and never downloads anything â€” it just shows a link. Turn it off by
+putting `"checkForUpdates": false` in `config.json`.
+
+No analytics, no tracking, ever.
 
 ## When something goes wrong
 
