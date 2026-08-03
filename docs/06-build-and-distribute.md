@@ -145,27 +145,27 @@ Trimming is not separately enabled: AOT already implies it.
 
 ## Versioning
 
-Edit `Directory.Build.props` at the repo root — version is shared by every project:
+`Directory.Build.props` at the repo root holds the only version in the codebase:
 
 ```xml
-<Version>0.1.0</Version>
-<InformationalVersion>0.1.0+$(GITCOMMIT)</InformationalVersion>
+<Version>0.4.0</Version>
 ```
 
-Print in banner:
+Everything else derives from it. The SDK turns it into `AssemblyInformationalVersion` with a
+`+<commit sha>` suffix, and both surfaces read that attribute rather than carrying a literal — the
+console banner via `Components.Version`, the app header via `MainWindowViewModel.Version`. Both trim
+the suffix, because a commit hash on a banner is noise to the person reading it. So a version bump
+is one line, and the UI cannot disagree with the build.
 
-```csharp
-var ver = typeof(Program).Assembly
-    .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
-    ?? "dev";
-AnsiConsole.MarkupLine($"[bold cyan]OpenKey[/] [grey]v{ver}[/]");
-```
+The `.exe` metadata Explorer shows comes from the same property.
 
-SemVer:
-- `1.0.0` — reserved for the first stable release; shipping versions so far are `0.x`
-- `1.1.0` — Phase 1.1 QoL
-- `1.2.0` — Phase 1.2 QoL
-- `2.0.0` — GUI (Phase 2)
+SemVer, corrected against what actually shipped:
+- `0.x` — everything so far, including the GUI
+- `1.0.0` — reserved for the first stable release
+
+An earlier version of this table mapped releases onto internal phase numbers and claimed the GUI
+would be `2.0.0`. It shipped in `0.3.0`. Phases describe the order work happens in, not the version
+it lands under, and public surfaces never mention them — see the release naming convention above.
 
 ## Smoke test checklist (manual, run after every publish)
 

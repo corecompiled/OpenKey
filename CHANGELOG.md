@@ -3,7 +3,7 @@
 Notable changes to OpenKey. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.4.0] — 2026-08-04
 
 ### Added
 
@@ -230,7 +230,8 @@ much smaller, faster binary.
 - Commands: `/about`, `/models`, `/model`, `/cls`, `/help`, `/reset`, `/quit`.
 - Single self-contained `.exe` that runs from a USB stick with nothing installed.
 
-[Unreleased]: https://github.com/corecompiled/OpenKey/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/corecompiled/OpenKey/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/corecompiled/OpenKey/releases/tag/v0.4.0
 [0.3.0]: https://github.com/corecompiled/OpenKey/releases/tag/v0.3.0
 [0.2.1]: https://github.com/corecompiled/OpenKey/releases/tag/v0.2.1
 [0.2.0]: https://github.com/corecompiled/OpenKey/releases/tag/v0.2.0
