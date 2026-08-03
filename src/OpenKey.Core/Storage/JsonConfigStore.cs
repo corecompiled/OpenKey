@@ -81,6 +81,9 @@ public sealed class JsonConfigStore : IConfigStore
             ? config.MaxTokens
             : OpenKeyConfig.DefaultMaxTokens;
 
-        return new OpenKeyConfig(models, theme, maxTokens, config.CheckForUpdates);
+        // WithUserName rather than passing it straight through: this file is hand-editable, so
+        // the name gets the same trim and length cap as one typed into the app.
+        return new OpenKeyConfig(models, theme, maxTokens, config.CheckForUpdates)
+            .WithUserName(config.UserName);
     }
 }

@@ -133,9 +133,20 @@ See `04-model-rotation.md` § "Persistence of rotation state".
   "preferredModels": [],
   "theme": "default",
   "maxTokens": 2048,
-  "checkForUpdates": true
+  "checkForUpdates": true,
+  "userName": null
 }
 ```
+
+`userName` is what OpenKey calls you on your own messages. `null` — the default — means "use the
+Windows account name", so there is no name prompt at first run: the first run already asks for a
+key, and a second question before anything useful has happened is a tax when the account name is
+right almost every time. Change it with `/name` in the console or **⋯ → Your name…** in the GUI;
+`/name reset` or a blank value clears it.
+
+It is **display only**. It never enters a `ChatMessage`, is never sent to a provider, and never
+appears in an export — exports say `You`, so a shared transcript does not carry a name the author
+did not choose to put in it.
 
 `checkForUpdates` governs the single request to `api.github.com` made at launch to see whether a
 newer release exists. Notify only — nothing is downloaded or installed automatically, in any phase.
@@ -145,11 +156,13 @@ Set it to `false` and OpenKey talks to OpenRouter and nowhere else. See
 If absent, defaults apply (empty list means rotation chooses freely).
 
 Owned by `IConfigStore` / `JsonConfigStore`. `preferredModels` is how a pinned model is expressed —
-a single entry — so `/models` now survives a restart. `/theme` writes `theme`.
+a single entry — so `/models` now survives a restart. `/theme` writes `theme`; `/name` writes
+`userName`.
 
 The file is meant to be hand-editable, so every field is treated as untrusted on load: blank model
-ids are dropped, `theme` is lower-cased and falls back to `default` if unknown, and `maxTokens`
-outside a sane range reverts to 2048. A corrupt file is renamed to `config.json.broken-<unix>` and
+ids are dropped, `theme` is lower-cased and falls back to `default` if unknown, `maxTokens`
+outside a sane range reverts to 2048, and `userName` is trimmed, capped at 32 characters, and
+treated as unset when blank. A corrupt file is renamed to `config.json.broken-<unix>` and
 defaults apply, exactly as with a corrupt session — preferences are never worth failing a launch
 over.
 

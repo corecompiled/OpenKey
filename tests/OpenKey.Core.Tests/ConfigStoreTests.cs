@@ -118,3 +118,49 @@ public sealed class TokenCounterTests
         Assert.True(counter.Count(messages) > counter.Count("hi") + counter.Count("hello"));
     }
 }
+
+public sealed class UserNameTests
+{
+    [Fact]
+    public void UnsetFallsBackToTheWindowsAccountName()
+    {
+        // The default is what shipped before the setting existed, so nobody has to answer a
+        // question at first run to get a sensible label.
+        Assert.Equal(Environment.UserName, OpenKeyConfig.Default.DisplayName);
+    }
+
+    [Fact]
+    public void AChosenNameWins()
+    {
+        Assert.Equal("Sam", OpenKeyConfig.Default.WithUserName("Sam").DisplayName);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData(null)]
+    public void BlankClearsTheOverrideRatherThanStoringIt(string? name)
+    {
+        var config = OpenKeyConfig.Default.WithUserName("Sam").WithUserName(name);
+
+        // Stored as null, not as "": a blank label would leave the prompt with nothing on it.
+        Assert.Null(config.UserName);
+        Assert.Equal(Environment.UserName, config.DisplayName);
+    }
+
+    [Fact]
+    public void SurroundingWhitespaceIsNotPartOfTheName()
+    {
+        Assert.Equal("Sam", OpenKeyConfig.Default.WithUserName("  Sam  ").UserName);
+    }
+
+    [Fact]
+    public void TheNameSurvivesARoundTrip()
+    {
+        using var paths = new TempAppPaths();
+        var store = new JsonConfigStore(paths);
+        store.Save(store.Load().WithUserName("Sam"));
+
+        Assert.Equal("Sam", new JsonConfigStore(paths).Load().UserName);
+    }
+}
